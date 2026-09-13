@@ -99,10 +99,17 @@ header.topbar{
 }
 .mobile-panel a{display:block; padding:14px 0; font-size:17px; border-bottom:1px solid var(--line); color:var(--ink);}
 .mobile-panel .mp-actions{display:flex; gap:10px; margin-top:18px;}
+.user-badge-btn{display:inline-flex; align-items:center; gap:8px; padding:5px 12px; border-radius:24px; border:1.5px solid var(--line); background:var(--paper-raised); cursor:pointer; font-size:13.5px; color:var(--ink); transition:border-color .15s, background .15s;}
+.user-badge-btn:hover{border-color:var(--primary-light); background:var(--paper);}
+.user-avatar-sm{width:26px; height:26px; border-radius:50%; background:var(--primary); color:#fff; font-size:11px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;}
+.user-mobile-card{padding:14px; background:var(--paper-raised); border:1px solid var(--line); border-radius:9px; margin-top:16px;}
+.toast-msg{background:var(--primary); color:#fff; padding:12px 18px; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.18); font-size:13.5px; display:flex; align-items:center; gap:10px; pointer-events:auto; animation:toastIn .25s ease-out;}
+@keyframes toastIn{from{opacity:0; transform:translateY(-8px);} to{opacity:1; transform:translateY(0);}}
+.demo-banner{background:var(--accent-soft); border:1px solid #DFCE9F; color:#6B4E12; padding:12px 16px; border-radius:8px; margin-bottom:24px; font-size:13.5px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;}
 
 @media (max-width:960px){
   .nav-links{display:none;}
-  .nav-actions .btn-ghost, .nav-actions .btn-primary{display:none;}
+  .nav-actions > .btn-ghost, .nav-actions > .btn-primary, #navAuthArea > .btn-ghost, #navAuthArea > .btn-primary, #navAuthArea .user-badge-btn{display:none;}
   .hamburger{display:inline-flex;}
   .mobile-panel.open{display:block;}
 }
@@ -440,9 +447,11 @@ table.lb-table tr:hover td{background:rgba(15,61,62,0.02);}
           <a href="#/admin" onclick="closeDashDropdown()">⚙️ Admin Dashboard</a>
         </div>
       </div>
-      <a href="#/track" class="btn btn-ghost btn-sm">Track Problem</a>
-      <a href="#/login" class="btn btn-ghost btn-sm">Login</a>
-      <a href="#/register" class="btn btn-primary btn-sm">Register</a>
+      <div id="navAuthArea" style="display:inline-flex; align-items:center; gap:8px;">
+        <a href="#/track" class="btn btn-ghost btn-sm">Track Problem</a>
+        <a href="#/login" class="btn btn-ghost btn-sm">Login</a>
+        <a href="#/register" class="btn btn-primary btn-sm">Register</a>
+      </div>
       <button class="hamburger" onclick="toggleMobile()" aria-label="Open menu">
         <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 6h16M3 11h16M3 16h16" stroke="#0F3D3E" stroke-width="1.8" stroke-linecap="round"/></svg>
       </button>
@@ -466,12 +475,16 @@ table.lb-table tr:hover td{background:rgba(15,61,62,0.02);}
     <a href="#/dashboard-industry" onclick="closeMobile()">Industry Dashboard</a>
     <a href="#/dashboard-government" onclick="closeMobile()">Government Dashboard</a>
     <a href="#/admin" onclick="closeMobile()">Admin Dashboard</a>
-    <div class="mp-actions">
-      <a href="#/login" class="btn btn-ghost" onclick="closeMobile()">Login</a>
-      <a href="#/register" class="btn btn-primary" onclick="closeMobile()">Register</a>
+    <div id="mobileAuthArea">
+      <div class="mp-actions">
+        <a href="#/login" class="btn btn-ghost" onclick="closeMobile()">Login</a>
+        <a href="#/register" class="btn btn-primary" onclick="closeMobile()">Register</a>
+      </div>
     </div>
   </div>
 </header>
+
+<div id="toastContainer" style="position:fixed; top:78px; right:24px; z-index:100; pointer-events:none; display:flex; flex-direction:column; gap:10px;"></div>
 
 <main id="app"></main>
 
@@ -522,10 +535,261 @@ const SUPABASE_URL = "https://jqnqwvnlhwcuikbkaowy.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_3DLbXcc09oFlm-vYDgO87A_ccocUKGJ";
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let currentSession = null;
-async function restoreSession() {
-  const { data } = await supabaseClient.auth.getSession();
-  currentSession = data.session;
+let currentUserProfile = null;
+
+function getInitials(name){
+  if(!name) return 'U';
+  const parts = name.trim().split(/\s+/);
+  if(parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
 }
+
+function getRoleLabel(role){
+  if(!role) return 'Citizen';
+  const r = role.toLowerCase();
+  if(r === 'citizen') return '🧑 Citizen';
+  if(r === 'student') return '🎓 Student';
+  if(r === 'university') return '🏛️ University';
+  if(r === 'industry') return '🏭 Industry';
+  if(r === 'government') return '🏢 Government';
+  if(r === 'admin') return '⚙️ Admin';
+  return role.charAt(0).toUpperCase() + role.slice(1);
+}
+
+function getRoleBadgeClass(role){
+  const r = (role || '').toLowerCase();
+  if(r === 'student') return 'st-open';
+  if(r === 'university') return 'st-analyzed';
+  if(r === 'industry') return 'st-selected';
+  if(r === 'government') return 'st-pilot';
+  if(r === 'admin') return 'sev-high';
+  return 'st-new';
+}
+
+function getRoleDashboardHash(role){
+  const r = (role || '').toLowerCase();
+  if(r === 'citizen') return '#/dashboard-citizen';
+  if(r === 'student') return '#/dashboard-student';
+  if(r === 'university') return '#/dashboard-university';
+  if(r === 'industry') return '#/dashboard-industry';
+  if(r === 'government') return '#/dashboard-government';
+  if(r === 'admin') return '#/admin';
+  return '#/dashboard-citizen';
+}
+
+function showToast(msg, duration = 4000){
+  const c = document.getElementById('toastContainer');
+  if(!c) return;
+  const t = document.createElement('div');
+  t.className = 'toast-msg';
+  t.innerHTML = `<span>✓</span><span>${msg}</span>`;
+  c.appendChild(t);
+  setTimeout(()=>{
+    t.style.opacity = '0';
+    t.style.transition = 'opacity .3s ease';
+    setTimeout(()=>t.remove(), 300);
+  }, duration);
+}
+
+async function fetchCurrentUserProfile(){
+  if(!currentSession?.user){
+    currentUserProfile = null;
+    return null;
+  }
+  const u = currentSession.user;
+  try {
+    const { data, error } = await supabaseClient
+      .from('profiles')
+      .select('*')
+      .eq('id', u.id)
+      .single();
+    if(!error && data){
+      currentUserProfile = {
+        ...data,
+        email: u.email,
+        phone: u.user_metadata?.phone || '',
+        location: u.user_metadata?.location || ''
+      };
+    } else {
+      currentUserProfile = {
+        id: u.id,
+        full_name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'User',
+        role: u.user_metadata?.role || 'citizen',
+        organization: u.user_metadata?.organization || null,
+        department: u.user_metadata?.department || null,
+        skills: u.user_metadata?.skills || [],
+        email: u.email,
+        phone: u.user_metadata?.phone || '',
+        location: u.user_metadata?.location || ''
+      };
+    }
+  } catch(e){
+    console.warn('Could not fetch profiles table, fallback to metadata:', e);
+    currentUserProfile = {
+      id: u.id,
+      full_name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'User',
+      role: u.user_metadata?.role || 'citizen',
+      organization: u.user_metadata?.organization || null,
+      department: u.user_metadata?.department || null,
+      skills: u.user_metadata?.skills || [],
+      email: u.email
+    };
+  }
+  return currentUserProfile;
+}
+
+function toggleUserDropdown(e){
+  e.stopPropagation();
+  const d = document.getElementById('userDropdown');
+  if(d) d.classList.toggle('open');
+}
+function closeUserDropdown(){
+  const d = document.getElementById('userDropdown');
+  if(d) d.classList.remove('open');
+}
+document.addEventListener('click', closeUserDropdown);
+
+async function handleSignOut(){
+  try {
+    await supabaseClient.auth.signOut();
+  } catch(e){
+    console.warn('Signout error:', e);
+  }
+  currentSession = null;
+  currentUserProfile = null;
+  updateNav();
+  showToast('You have signed out successfully.');
+  location.hash = '#/home';
+}
+
+function updateNav(){
+  const navAuth = document.getElementById('navAuthArea');
+  const mobAuth = document.getElementById('mobileAuthArea');
+  const dashPanel = document.getElementById('dashPanel');
+
+  if(currentSession?.user && currentUserProfile){
+    const name = currentUserProfile.full_name || currentSession.user.email?.split('@')[0] || 'User';
+    const email = currentSession.user.email || '';
+    const role = currentUserProfile.role || 'citizen';
+    const roleLabel = getRoleLabel(role);
+    const badgeClass = getRoleBadgeClass(role);
+    const initials = getInitials(name);
+    const dashHash = getRoleDashboardHash(role);
+
+    if(navAuth){
+      navAuth.innerHTML = `
+        <a href="#/track" class="btn btn-ghost btn-sm">Track</a>
+        <a href="#/submit" class="btn btn-primary btn-sm" style="font-size:13px; padding:7px 14px;">+ Submit</a>
+        <div class="dropdown" id="userDropdown">
+          <button class="user-badge-btn" onclick="toggleUserDropdown(event)" title="${name} (${roleLabel})">
+            <span class="user-avatar-sm">${initials}</span>
+            <span style="font-weight:600; max-width:95px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${name}</span>
+            <span class="badge ${badgeClass}" style="font-size:11px; padding:2px 7px;">${roleLabel}</span>
+            <span style="font-size:10px; margin-left:1px;">▾</span>
+          </button>
+          <div class="dropdown-panel" id="userPanel" style="min-width:240px; right:0;">
+            <div class="dd-label">Signed in as</div>
+            <div style="font-weight:700; font-size:14px; padding:0 10px 2px; color:var(--primary); overflow:hidden; text-overflow:ellipsis;">${name}</div>
+            <div style="font-size:11.5px; color:var(--ink-soft); padding:0 10px 8px; word-break:break-all;">${email}</div>
+            <div class="dd-sep"></div>
+            <a href="${dashHash}" onclick="closeUserDropdown()">📊 <b>My Dashboard</b> (${role.toUpperCase()})</a>
+            <a href="#/submit" onclick="closeUserDropdown()">📝 Submit a Problem</a>
+            <a href="#/notifications" onclick="closeUserDropdown()">🔔 Notifications</a>
+            <div class="dd-sep"></div>
+            <a href="javascript:void(0)" onclick="handleSignOut(); closeUserDropdown();" style="color:var(--error); font-weight:600;">🚪 Sign Out</a>
+          </div>
+        </div>
+      `;
+    }
+
+    if(mobAuth){
+      mobAuth.innerHTML = `
+        <div class="user-mobile-card">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div class="avatar">${initials}</div>
+            <div style="overflow:hidden;">
+              <div style="font-weight:700; font-size:15px; color:var(--primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${name}</div>
+              <div style="font-size:12px; color:var(--ink-soft);">${roleLabel} · ${email}</div>
+            </div>
+          </div>
+          <div style="display:flex; gap:8px; margin-top:12px;">
+            <a href="${dashHash}" class="btn btn-primary btn-sm" style="flex:1;" onclick="closeMobile()">My Dashboard</a>
+            <button class="btn btn-ghost btn-sm" style="color:var(--error); border-color:var(--error);" onclick="handleSignOut(); closeMobile();">Sign Out</button>
+          </div>
+        </div>
+      `;
+    }
+
+    if(dashPanel){
+      dashPanel.innerHTML = `
+        <div class="dd-label" style="color:var(--primary); font-weight:700;">★ Your Active Dashboard</div>
+        <a href="${dashHash}" onclick="closeDashDropdown()" style="background:var(--accent-soft); font-weight:600;">${roleLabel} Dashboard</a>
+        <div class="dd-sep"></div>
+        <div class="dd-label">Demo: view other roles</div>
+        <a href="#/dashboard-citizen" onclick="closeDashDropdown()">🧑 Citizen Profile</a>
+        <a href="#/dashboard-student" onclick="closeDashDropdown()">🎓 Student Dashboard</a>
+        <a href="#/dashboard-university" onclick="closeDashDropdown()">🏛️ University Dashboard</a>
+        <a href="#/dashboard-industry" onclick="closeDashDropdown()">🏭 Industry Dashboard</a>
+        <a href="#/dashboard-government" onclick="closeDashDropdown()">🏢 Government Dashboard</a>
+        <div class="dd-sep"></div>
+        <a href="#/admin" onclick="closeDashDropdown()">⚙️ Admin Dashboard</a>
+      `;
+    }
+  } else {
+    // Logged out
+    if(navAuth){
+      navAuth.innerHTML = `
+        <a href="#/track" class="btn btn-ghost btn-sm">Track Problem</a>
+        <a href="#/login" class="btn btn-ghost btn-sm">Login</a>
+        <a href="#/register" class="btn btn-primary btn-sm">Register</a>
+      `;
+    }
+    if(mobAuth){
+      mobAuth.innerHTML = `
+        <div class="mp-actions">
+          <a href="#/login" class="btn btn-ghost" onclick="closeMobile()">Login</a>
+          <a href="#/register" class="btn btn-primary" onclick="closeMobile()">Register</a>
+        </div>
+      `;
+    }
+    if(dashPanel){
+      dashPanel.innerHTML = `
+        <div class="dd-label">Demo: view as</div>
+        <a href="#/dashboard-citizen" onclick="closeDashDropdown()">🧑 Citizen Profile</a>
+        <a href="#/dashboard-student" onclick="closeDashDropdown()">🎓 Student Dashboard</a>
+        <a href="#/dashboard-university" onclick="closeDashDropdown()">🏛️ University Dashboard</a>
+        <a href="#/dashboard-industry" onclick="closeDashDropdown()">🏭 Industry Dashboard</a>
+        <a href="#/dashboard-government" onclick="closeDashDropdown()">🏢 Government Dashboard</a>
+        <div class="dd-sep"></div>
+        <a href="#/admin" onclick="closeDashDropdown()">⚙️ Admin Dashboard</a>
+      `;
+    }
+  }
+}
+
+async function restoreSession() {
+  try {
+    const { data } = await supabaseClient.auth.getSession();
+    currentSession = data.session;
+    if(currentSession){
+      await fetchCurrentUserProfile();
+    }
+  } catch(e) {
+    console.warn('Session restoration failed', e);
+  }
+  updateNav();
+}
+
+supabaseClient.auth.onAuthStateChange(async (event, session) => {
+  currentSession = session;
+  if(session){
+    await fetchCurrentUserProfile();
+  } else {
+    currentUserProfile = null;
+  }
+  updateNav();
+});
+
 /* ============== DATA ============== */
 const DISTRICTS = [
  ["Ranchi",212,58,71,83],["East Singhbhum",184,44,60,80],["West Singhbhum",96,31,29,36],
@@ -586,6 +850,9 @@ async function loadIdeas() {
   return {
     id: p.problem_code || p.id,
     rawId: p.id,
+    citizenId: p.citizen_id,
+    locality: p.locality || '',
+    state: p.state || 'Jharkhand',
     title: p.title,
     description: p.description,
     district: p.district,
@@ -649,6 +916,7 @@ function navigate(){
   const route = parts[0];
   const param = parts[1];
   document.querySelectorAll('.nav-links a').forEach(a=>a.classList.toggle('active', a.dataset.route===route));
+  updateNav();
   const footer = document.getElementById('siteFooter');
   footer.style.display = (route==='login'||route==='register') ? 'none' : 'block';
   window.scrollTo(0,0);
@@ -658,6 +926,7 @@ function navigate(){
     problem: ()=>renderProblemDetail(param), project: ()=>renderProjectDetail(param),
     'ai-analysis': renderAIResult, notifications: renderNotifications, search: renderSearch,
     admin: renderAdmin,
+    profile: () => { const h = getRoleDashboardHash(currentUserProfile?.role); location.hash = h; },
     'dashboard-citizen': renderCitizenProfile,
     'dashboard-student': renderStudentDashboard,
     'dashboard-university': renderUniversityDashboard,
@@ -1235,18 +1504,32 @@ function renderLogin(){
 }
 
 async function doLogin(){
-  const email = document.getElementById('loginEmail').value;
-  const password = document.getElementById('loginPassword').value;
+  const email = document.getElementById('loginEmail')?.value?.trim();
+  const password = document.getElementById('loginPassword')?.value;
   const errEl = document.getElementById('loginError');
   errEl.textContent = '';
+  if(!email || !password){ errEl.textContent = 'Please enter both email and password.'; return; }
 
-  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-  if (error) {
-    errEl.textContent = error.message;
-    return;
+  const btn = document.querySelector('.auth-box button.btn-primary');
+  if(btn){ btn.disabled = true; btn.textContent = 'Logging in...'; }
+
+  try {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) {
+      errEl.textContent = error.message;
+      if(btn){ btn.disabled = false; btn.textContent = 'Login'; }
+      return;
+    }
+    currentSession = data.session;
+    await fetchCurrentUserProfile();
+    updateNav();
+    showToast(`Welcome back, ${currentUserProfile?.full_name || 'User'}!`);
+    const targetHash = getRoleDashboardHash(currentUserProfile?.role);
+    location.hash = targetHash || '#/home';
+  } catch(e){
+    errEl.textContent = 'Login error: ' + e.message;
+    if(btn){ btn.disabled = false; btn.textContent = 'Login'; }
   }
-  currentSession = data.session;
-  location.hash = '#/home';
 }
 
 /* ============== REGISTER ============== */
@@ -1316,86 +1599,219 @@ async function submitRegistration(){
   const errEl = document.getElementById('regError');
   errEl.textContent = '';
 
-  const email = document.getElementById('reg_email')?.value;
-  const password = document.getElementById('reg_password').value;
+  const email = document.getElementById('reg_email')?.value?.trim();
+  const password = document.getElementById('reg_password')?.value;
   if(!email || !password){ errEl.textContent = 'Email and password are required.'; return; }
+  if(password.length < 6){ errEl.textContent = 'Password must be at least 6 characters.'; return; }
 
   const raw = {};
-  fields.forEach(f => { raw[f[2]] = document.getElementById(`reg_${f[2]}`)?.value || ''; });
+  fields.forEach(f => { raw[f[2]] = document.getElementById(`reg_${f[2]}`)?.value?.trim() || ''; });
 
-  const { data, error } = await supabaseClient.auth.signUp({
-    email, password,
-    options: { data: { role: regRole.toLowerCase(), full_name: raw.name || '' } }
-  });
+  const btn = document.querySelector('#regBox button.btn-primary');
+  if(btn){ btn.disabled = true; btn.textContent = 'Creating account...'; }
 
-  if(error){ errEl.textContent = error.message; return; }
-  currentSession = data.session;
+  const orgValue = raw.university || raw.industry || raw.name || null;
+  const userMetadata = {
+    role: regRole.toLowerCase(),
+    full_name: raw.name || '',
+    organization: orgValue || '',
+    department: raw.department || '',
+    phone: raw.phone || '',
+    location: raw.location || raw.jurisdiction || '',
+    skills: raw.skills ? raw.skills.split(',').map(s=>s.trim()).filter(Boolean) : [],
+    technologies: raw.technologies ? raw.technologies.split(',').map(s=>s.trim()).filter(Boolean) : []
+  };
 
-  // Trigger only sets role + full_name — fill in the rest ourselves.
-  const orgValue = raw.university || raw.industry || raw.name || null; // name doubles as org for Government/University roles
-  const profilePatch = {};
-  if (orgValue) profilePatch.organization = orgValue;
-  if (raw.department) profilePatch.department = raw.department;
-  if (raw.skills) profilePatch.skills = raw.skills.split(',').map(s=>s.trim()).filter(Boolean);
+  try {
+    const { data, error } = await supabaseClient.auth.signUp({
+      email, password,
+      options: { data: userMetadata }
+    });
 
-  if (Object.keys(profilePatch).length) {
-    await supabaseClient.from('profiles').update(profilePatch).eq('id', data.user.id);
+    if(error){
+      errEl.textContent = error.message;
+      if(btn){ btn.disabled = false; btn.textContent = 'Create account'; }
+      return;
+    }
+
+    // If confirmation email is required by Supabase and no active session returned
+    if(!data.session && data.user){
+      document.getElementById('regBox').innerHTML = `
+        <div class="card center" style="padding:40px 20px;">
+          <div style="font-size:38px; color:var(--success);">✓</div>
+          <h3 style="font-size:22px; margin-top:12px;">Account created successfully!</h3>
+          <p class="muted" style="margin-top:8px; font-size:14px;">We've sent a confirmation email to <b>${email}</b>.</p>
+          <p class="muted" style="margin-top:4px; font-size:13.5px;">Please verify your email address to activate your <b>${regRole}</b> account.</p>
+          <div style="margin-top:24px;">
+            <a href="#/login" class="btn btn-primary" style="display:inline-flex;">Proceed to Login</a>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    currentSession = data.session;
+
+    // Trigger sets role + full_name — update additional fields in profiles table
+    const profilePatch = {
+      role: regRole.toLowerCase(),
+      full_name: raw.name || ''
+    };
+    if (orgValue) profilePatch.organization = orgValue;
+    if (raw.department) profilePatch.department = raw.department;
+    if (userMetadata.skills.length) profilePatch.skills = userMetadata.skills;
+
+    if (data.user?.id) {
+      try {
+        await supabaseClient.from('profiles').update(profilePatch).eq('id', data.user.id);
+      } catch(pe){
+        console.warn('Profile row update warning:', pe);
+      }
+    }
+
+    await fetchCurrentUserProfile();
+    updateNav();
+    showToast(`Welcome to ECHELON, ${currentUserProfile?.full_name || raw.name || 'User'}!`);
+
+    // Redirect directly to the user's role dashboard
+    const targetHash = getRoleDashboardHash(regRole.toLowerCase());
+    location.hash = targetHash;
+  } catch(e){
+    errEl.textContent = 'Registration failed: ' + e.message;
+    if(btn){ btn.disabled = false; btn.textContent = 'Create account'; }
   }
-
-  location.hash = '#/home';
 }
 
 /* ============== CITIZEN PROFILE ============== */
 function renderCitizenProfile(){
-  const myProblems = PROBLEMS.slice(0,3);
+  const isAuth = Boolean(currentSession?.user);
+  const name = isAuth ? (currentUserProfile?.full_name || currentSession.user.email?.split('@')[0] || 'Citizen') : 'Rekha Kumari';
+  const initials = getInitials(name);
+  const loc = isAuth ? (currentUserProfile?.location || 'Jharkhand, India') : 'Nagri, Ranchi · Jharkhand';
+  const myProblems = isAuth ? PROBLEMS.filter(p => p.citizenId === currentSession.user.id) : PROBLEMS.slice(0,3);
+  const solvedCount = myProblems.filter(p => p.status === 'Solved').length;
+  const platformTotal = PROBLEMS.length;
+  const platformSolved = PROBLEMS.filter(p => p.status === 'Solved').length;
+
+  // Real problems reported by other citizens from the database
+  const communityProblems = isAuth
+    ? PROBLEMS.filter(p => p.citizenId !== currentSession.user.id)
+    : PROBLEMS;
+
   app.innerHTML = `
   <section class="wrap">
+    ${!isAuth ? `
+      <div class="demo-banner">
+        <span>ℹ️ <b>Demo View:</b> You are previewing the citizen dashboard as <b>Rekha Kumari</b>.</span>
+        <div><a href="#/register" class="btn btn-primary btn-sm">Register as Citizen</a> <a href="#/login" class="btn btn-ghost btn-sm">Login</a></div>
+      </div>
+    ` : `
+      <div class="demo-banner" style="background:#EBF5F0; border-color:#BCDDCB; color:var(--success);">
+        <span>✓ <b>Active Account:</b> Logged in as <b>${name}</b> (${currentSession.user.email})</span>
+        <button class="btn btn-ghost btn-sm" onclick="handleSignOut()">Sign Out</button>
+      </div>
+    `}
     <div class="profile-head">
-      <div class="profile-avatar round">RK</div>
+      <div class="profile-avatar round">${initials}</div>
       <div>
-        <h2 style="font-size:22px;">Rekha Kumari</h2>
-        <div class="profile-meta"><span>Nagri, Ranchi · Jharkhand</span></div>
+        <h2 style="font-size:22px;">${name}</h2>
+        <div class="profile-meta"><span>${loc}</span> · <span class="badge st-open"><span class="d"></span>Registered Citizen</span></div>
+      </div>
+      <div class="impact-score">
+        <a href="#/submit" class="btn btn-primary btn-sm">+ Submit New Problem</a>
       </div>
     </div>
     <div class="kpi-row">
-      <div class="kpi-card"><div class="num">5</div><div class="lab">Problems reported</div></div>
-      <div class="kpi-card"><div class="num">2</div><div class="lab">Problems solved</div></div>
-      <div class="kpi-card"><div class="num">3</div><div class="lab">Feedback given</div></div>
-      <div class="kpi-card"><div class="num">1,240</div><div class="lab">Impact created (residents)</div></div>
+      <div class="kpi-card"><div class="num">${isAuth ? myProblems.length : 5}</div><div class="lab">My problems reported</div></div>
+      <div class="kpi-card"><div class="num">${isAuth ? solvedCount : 2}</div><div class="lab">My problems solved</div></div>
+      <div class="kpi-card"><div class="num">${platformTotal}</div><div class="lab">Total community problems</div></div>
+      <div class="kpi-card"><div class="num">${platformSolved}</div><div class="lab">Total problems solved</div></div>
     </div>
   </section>
+
   <section class="wrap" style="padding-bottom:60px;">
-    <div class="section-head"><div><h2 style="font-size:20px;">My problems</h2></div></div>
-    <div class="grid-3">${myProblems.map(problemCard).join('')}</div>
-    <div class="section-head" style="margin-top:40px;"><div><h2 style="font-size:20px;">Notifications</h2></div></div>
-    ${notifList(3)}
+    <div class="section-head">
+      <div>
+        <h2 style="font-size:20px;">My reported problems</h2>
+        <p>Problems you have personally submitted to the ECHELON pipeline.</p>
+      </div>
+    </div>
+    ${myProblems.length > 0 ? `<div class="grid-3">${myProblems.map(problemCard).join('')}</div>` : `
+      <div class="card center" style="padding:36px 20px;">
+        <div style="font-size:28px; margin-bottom:8px;">📝</div>
+        <p class="muted" style="font-size:15px; font-weight:600; color:var(--ink);">You haven't reported any problems yet (0)</p>
+        <p class="muted" style="font-size:13px; max-width:48ch; margin:6px auto 16px;">Notice an issue with drinking water, road maintenance, school facilities, or sanitation in your locality? Report it to route it to solvers.</p>
+        <a href="#/submit" class="btn btn-primary">+ Submit a Problem</a>
+      </div>
+    `}
+
+    <div class="section-head" style="margin-top:44px;">
+      <div>
+        <h2 style="font-size:20px;">Community problems reported by others</h2>
+        <p>Real problems submitted by citizens across Jharkhand currently in the pipeline (${platformTotal} total reported in database).</p>
+      </div>
+      <a href="#/explorer" class="pill-link">Explore all ${platformTotal} problems →</a>
+    </div>
+    ${communityProblems.length > 0 ? `
+      <div class="grid-3">
+        ${communityProblems.slice(0, 6).map(problemCard).join('')}
+      </div>
+    ` : `
+      <div class="card center" style="padding:30px;"><p class="muted">No community problems reported yet.</p></div>
+    `}
+
+    <div class="section-head" style="margin-top:44px;">
+      <div>
+        <h2 style="font-size:20px;">Pipeline Notifications & Updates</h2>
+        <p>${myProblems.length > 0 ? 'Live status updates on your submitted problems.' : 'Live platform updates from problems reported across Jharkhand.'}</p>
+      </div>
+    </div>
+    ${getNotifications(5)}
   </section>`;
 }
 
 /* ============== STUDENT PROFILE + DASHBOARD ============== */
 function renderStudentDashboard(){
+  const isAuth = Boolean(currentSession?.user);
+  const name = isAuth ? (currentUserProfile?.full_name || 'Student') : 'Ananya Kujur';
+  const initials = getInitials(name);
+  const org = isAuth ? (currentUserProfile?.organization || 'University') : 'BIT Mesra';
+  const dept = isAuth ? (currentUserProfile?.department || 'Engineering & Technology') : 'Computer Science';
+  const skills = (isAuth && currentUserProfile?.skills?.length) ? currentUserProfile.skills : ['IoT','Cloud','Python','Embedded Systems'];
+
   app.innerHTML = `
   <section class="wrap">
-    <div class="profile-head">
-      <div class="profile-avatar">AK</div>
-      <div>
-        <h2 style="font-size:22px;">Welcome, Ananya Kujur</h2>
-        <div class="profile-meta"><span>BIT Mesra</span><span>·</span><span>Computer Science</span></div>
-        <div style="margin-top:8px;"><span class="skill-chip">IoT</span><span class="skill-chip">Cloud</span><span class="skill-chip">Python</span><span class="skill-chip">Embedded Systems</span></div>
+    ${!isAuth ? `
+      <div class="demo-banner">
+        <span>ℹ️ <b>Demo View:</b> You are previewing the student dashboard as <b>Ananya Kujur</b>.</span>
+        <div><a href="#/register" class="btn btn-primary btn-sm">Register as Student</a> <a href="#/login" class="btn btn-ghost btn-sm">Login</a></div>
       </div>
-      <div class="impact-score"><div class="val">2,450</div><div class="lab">Credits · Rank #1</div></div>
+    ` : `
+      <div class="demo-banner" style="background:#EBF5F0; border-color:#BCDDCB; color:var(--success);">
+        <span>✓ <b>Active Account:</b> Logged in as <b>${name}</b> (${currentSession.user.email})</span>
+        <button class="btn btn-ghost btn-sm" onclick="handleSignOut()">Sign Out</button>
+      </div>
+    `}
+    <div class="profile-head">
+      <div class="profile-avatar">${initials}</div>
+      <div>
+        <h2 style="font-size:22px;">Welcome, ${name}</h2>
+        <div class="profile-meta"><span>${org}</span><span>·</span><span>${dept}</span> · <span class="badge st-open"><span class="d"></span>Student</span></div>
+        <div style="margin-top:8px;">${skills.map(s=>`<span class="skill-chip">${s}</span>`).join('')}</div>
+      </div>
+      <div class="impact-score"><div class="val">${isAuth ? '500' : '2,450'}</div><div class="lab">Credits · Active</div></div>
     </div>
     <div class="kpi-row">
-      <div class="kpi-card"><div class="num">6</div><div class="lab">Problems solved</div></div>
-      <div class="kpi-card"><div class="num">9</div><div class="lab">Ideas submitted</div></div>
-      <div class="kpi-card"><div class="num">4</div><div class="lab">Active projects</div></div>
-      <div class="kpi-card"><div class="num">#1</div><div class="lab">Leaderboard rank</div></div>
+      <div class="kpi-card"><div class="num">${isAuth ? 0 : 6}</div><div class="lab">Problems solved</div></div>
+      <div class="kpi-card"><div class="num">${isAuth ? 0 : 9}</div><div class="lab">Ideas submitted</div></div>
+      <div class="kpi-card"><div class="num">${isAuth ? 0 : 4}</div><div class="lab">Active projects</div></div>
+      <div class="kpi-card"><div class="num">${isAuth ? '#14' : '#1'}</div><div class="lab">Leaderboard rank</div></div>
     </div>
   </section>
   <section class="wrap" style="padding-bottom:60px;">
     <div class="section-head"><div><h2 style="font-size:20px;">Problems matching your skills</h2><p>Ranked by skill and technology fit to your profile.</p></div></div>
     <div class="card" id="matchesCard" style="padding:6px 20px;"><p class="muted" style="padding:16px 0;">Loading matches…</p></div>
-    <div class="section-head" style="margin-top:40px;"><div><h2 style="font-size:20px;">My active projects</h2></div></div>
+    <div class="section-head" style="margin-top:40px;"><div><h2 style="font-size:20px;">Active student projects</h2></div></div>
     <div class="grid-3">${IDEAS.slice(0,2).map(ideaCard).join('')}</div>
   </section>`;
   loadMyMatches();
@@ -1454,21 +1870,37 @@ function renderStudentProfilePublic(){ /* reachable via leaderboard row in futur
 
 /* ============== UNIVERSITY DASHBOARD ============== */
 function renderUniversityDashboard(){
+  const isAuth = Boolean(currentSession?.user);
+  const name = (isAuth && (currentUserProfile?.organization || currentUserProfile?.full_name)) ? (currentUserProfile.organization || currentUserProfile.full_name) : 'BIT Mesra';
+  const initials = getInitials(name);
+  const dept = isAuth ? (currentUserProfile?.department || 'Innovation Cell & Research') : 'CSE · ECE · Mechanical · Civil';
+
   app.innerHTML = `
   <section class="wrap">
-    <div class="profile-head">
-      <div class="profile-avatar">BM</div>
-      <div>
-        <h2 style="font-size:22px;">BIT Mesra</h2>
-        <div class="profile-meta"><span>Ranchi, Jharkhand</span><span>·</span><span>CSE · ECE · Mechanical · Civil</span></div>
+    ${!isAuth ? `
+      <div class="demo-banner">
+        <span>ℹ️ <b>Demo View:</b> You are previewing the university dashboard as <b>BIT Mesra</b>.</span>
+        <div><a href="#/register" class="btn btn-primary btn-sm">Register as University</a> <a href="#/login" class="btn btn-ghost btn-sm">Login</a></div>
       </div>
-      <div class="impact-score"><div class="val">3,120</div><div class="lab">Credits · Rank #1</div></div>
+    ` : `
+      <div class="demo-banner" style="background:#EBF5F0; border-color:#BCDDCB; color:var(--success);">
+        <span>✓ <b>Active Account:</b> Logged in as <b>${name}</b> (${currentSession.user.email})</span>
+        <button class="btn btn-ghost btn-sm" onclick="handleSignOut()">Sign Out</button>
+      </div>
+    `}
+    <div class="profile-head">
+      <div class="profile-avatar">${initials}</div>
+      <div>
+        <h2 style="font-size:22px;">${name}</h2>
+        <div class="profile-meta"><span>${dept}</span> · <span class="badge st-analyzed"><span class="d"></span>University</span></div>
+      </div>
+      <div class="impact-score"><div class="val">${isAuth ? '1,200' : '3,120'}</div><div class="lab">Credits · Active</div></div>
     </div>
     <div class="kpi-row">
-      <div class="kpi-card"><div class="num">38</div><div class="lab">Problems accepted</div></div>
-      <div class="kpi-card"><div class="num">52</div><div class="lab">Solutions submitted</div></div>
-      <div class="kpi-card"><div class="num">21</div><div class="lab">Active projects</div></div>
-      <div class="kpi-card"><div class="num">14</div><div class="lab">Problems solved</div></div>
+      <div class="kpi-card"><div class="num">${isAuth ? 0 : 38}</div><div class="lab">Problems accepted</div></div>
+      <div class="kpi-card"><div class="num">${isAuth ? 0 : 52}</div><div class="lab">Solutions submitted</div></div>
+      <div class="kpi-card"><div class="num">${isAuth ? 0 : 21}</div><div class="lab">Active projects</div></div>
+      <div class="kpi-card"><div class="num">${isAuth ? 0 : 14}</div><div class="lab">Problems solved</div></div>
     </div>
   </section>
   <section class="wrap" style="padding-bottom:60px;">
@@ -1483,21 +1915,37 @@ function renderUniversityDashboard(){
 
 /* ============== INDUSTRY DASHBOARD ============== */
 function renderIndustryDashboard(){
+  const isAuth = Boolean(currentSession?.user);
+  const name = (isAuth && (currentUserProfile?.organization || currentUserProfile?.full_name)) ? (currentUserProfile.organization || currentUserProfile.full_name) : 'Tata Steel Foundation';
+  const initials = getInitials(name);
+  const meta = isAuth ? (currentUserProfile?.department || 'CSR & Innovation') : 'CSR & Innovation · IoT · Sensors · Sustainability';
+
   app.innerHTML = `
   <section class="wrap">
-    <div class="profile-head">
-      <div class="profile-avatar">TS</div>
-      <div>
-        <h2 style="font-size:22px;">Tata Steel Foundation</h2>
-        <div class="profile-meta"><span>CSR & Innovation</span><span>·</span><span>IoT · Sensors · Sustainability</span></div>
+    ${!isAuth ? `
+      <div class="demo-banner">
+        <span>ℹ️ <b>Demo View:</b> You are previewing the industry dashboard as <b>Tata Steel Foundation</b>.</span>
+        <div><a href="#/register" class="btn btn-primary btn-sm">Register as Industry</a> <a href="#/login" class="btn btn-ghost btn-sm">Login</a></div>
       </div>
-      <div class="impact-score"><div class="val">2,960</div><div class="lab">Credits · Rank #1</div></div>
+    ` : `
+      <div class="demo-banner" style="background:#EBF5F0; border-color:#BCDDCB; color:var(--success);">
+        <span>✓ <b>Active Account:</b> Logged in as <b>${name}</b> (${currentSession.user.email})</span>
+        <button class="btn btn-ghost btn-sm" onclick="handleSignOut()">Sign Out</button>
+      </div>
+    `}
+    <div class="profile-head">
+      <div class="profile-avatar">${initials}</div>
+      <div>
+        <h2 style="font-size:22px;">${name}</h2>
+        <div class="profile-meta"><span>${meta}</span> · <span class="badge st-selected"><span class="d"></span>Industry Partner</span></div>
+      </div>
+      <div class="impact-score"><div class="val">${isAuth ? '1,500' : '2,960'}</div><div class="lab">Credits · Active</div></div>
     </div>
     <div class="kpi-row">
-      <div class="kpi-card"><div class="num">14</div><div class="lab">Available ideas</div></div>
-      <div class="kpi-card"><div class="num">9</div><div class="lab">Selected ideas</div></div>
-      <div class="kpi-card"><div class="num">7</div><div class="lab">Active projects</div></div>
-      <div class="kpi-card"><div class="num">4</div><div class="lab">Products developed</div></div>
+      <div class="kpi-card"><div class="num">${REAL_IDEAS.length || 14}</div><div class="lab">Available ideas</div></div>
+      <div class="kpi-card"><div class="num">${REAL_IDEAS.filter(i=>i.status==='shortlisted').length}</div><div class="lab">Selected ideas</div></div>
+      <div class="kpi-card"><div class="num">${REAL_IDEAS.filter(i=>i.status==='selected').length}</div><div class="lab">Active projects</div></div>
+      <div class="kpi-card"><div class="num">${isAuth ? 0 : 4}</div><div class="lab">Products developed</div></div>
     </div>
   </section>
   <section class="wrap" style="padding-bottom:60px;">
@@ -1573,18 +2021,34 @@ async function selectIdeaForProject(ideaId){
     alert('Could not create project: ' + e.message);
   }
 }
-/* ============== GOVERNMENT DASHBOARD ============== */
+
 /* ============== GOVERNMENT DASHBOARD ============== */
 function renderGovernmentDashboard(){
+  const isAuth = Boolean(currentSession?.user);
+  const name = (isAuth && (currentUserProfile?.organization || currentUserProfile?.full_name)) ? (currentUserProfile.organization || currentUserProfile.full_name) : 'Dept. of Water Resources, Jharkhand';
+  const initials = getInitials(name);
+  const jurisdiction = isAuth ? (currentUserProfile?.location || 'State jurisdiction') : 'State jurisdiction';
+
   app.innerHTML = `
   <section class="wrap">
-    <div class="profile-head">
-      <div class="profile-avatar">JH</div>
-      <div>
-        <h2 style="font-size:22px;">Dept. of Water Resources, Jharkhand</h2>
-        <div class="profile-meta"><span>State jurisdiction</span></div>
+    ${!isAuth ? `
+      <div class="demo-banner">
+        <span>ℹ️ <b>Demo View:</b> You are previewing the government dashboard as <b>Dept. of Water Resources</b>.</span>
+        <div><a href="#/register" class="btn btn-primary btn-sm">Register as Government</a> <a href="#/login" class="btn btn-ghost btn-sm">Login</a></div>
       </div>
-      <div class="impact-score"><div class="val">2,680</div><div class="lab">Credits · Rank #1</div></div>
+    ` : `
+      <div class="demo-banner" style="background:#EBF5F0; border-color:#BCDDCB; color:var(--success);">
+        <span>✓ <b>Active Account:</b> Logged in as <b>${name}</b> (${currentSession.user.email})</span>
+        <button class="btn btn-ghost btn-sm" onclick="handleSignOut()">Sign Out</button>
+      </div>
+    `}
+    <div class="profile-head">
+      <div class="profile-avatar">${initials}</div>
+      <div>
+        <h2 style="font-size:22px;">${name}</h2>
+        <div class="profile-meta"><span>${jurisdiction}</span> · <span class="badge st-pilot"><span class="d"></span>Government Authority</span></div>
+      </div>
+      <div class="impact-score"><div class="val">${isAuth ? '2,100' : '2,680'}</div><div class="lab">Credits · Active</div></div>
     </div>
   </section>
   <section class="wrap" style="padding-bottom:60px;">
@@ -1970,24 +2434,87 @@ async function addMilestone(projectId){
 }
 
 /* ============== NOTIFICATIONS ============== */
-function notifList(n){
-  const items = [
-    ["✅","Your problem has been analyzed.","2 hours ago"],
-    ["🏛️","3 universities have been matched to your problem.","5 hours ago"],
-    ["💡","Student Team A submitted a solution.","1 day ago"],
-    ["🏭","Industry X selected your idea.","2 days ago"],
-    ["🏢","Your prototype is under government evaluation.","4 days ago"],
-    ["🎉","Your problem has been implemented.","1 week ago"],
+function getNotifications(limit = 6){
+  const isAuth = Boolean(currentSession?.user);
+  const myProbs = isAuth ? PROBLEMS.filter(p => p.citizenId === currentSession.user.id) : [];
+
+  if(isAuth && myProbs.length === 0){
+    // User is logged in but has not submitted any problems yet:
+    // Show genuine recent platform activity from the database instead of fake "Your problem" notifications!
+    const realUpdates = PROBLEMS.slice(0, limit).map(p => {
+      const icon = p.status === 'Solved' ? '🎉' : p.status === 'AI Analyzed' ? '🤖' : p.status === 'Government Review' ? '🏢' : '📍';
+      return [
+        icon,
+        `[${p.district}] ${p.title} — Status: ${p.status}`,
+        p.date || 'Recent'
+      ];
+    });
+
+    return `
+      <div class="card" style="padding:14px 18px; margin-bottom:14px; background:var(--paper-raised); border-left:3px solid var(--accent);">
+        <div style="font-weight:600; font-size:13.5px; color:var(--primary);">No personal problem notifications yet</div>
+        <div style="font-size:12.5px; color:var(--ink-soft); margin-top:2px;">You haven't submitted any problems yet. Below is live pipeline activity on problems reported across Jharkhand:</div>
+      </div>
+      <div class="card" style="padding:6px 20px;">
+        ${realUpdates.map(it=>`
+          <div class="notif-row">
+            <div class="notif-icon">${it[0]}</div>
+            <div class="notif-text"><p>${it[1]}</p><span>${it[2]}</span></div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  if(myProbs.length > 0){
+    // Real notifications generated from the user's actual submitted problems!
+    const myNotifs = [];
+    myProbs.forEach(p => {
+      if(p.status === 'Solved'){
+        myNotifs.push(['🎉', `Your problem "${p.title}" (${p.id}) has been implemented and marked as Solved!`, p.date]);
+      } else if(p.status === 'Government Review' || p.status === 'Pilot'){
+        myNotifs.push(['🏢', `Your problem "${p.title}" (${p.id}) is undergoing government review in ${p.district}.`, p.date]);
+      } else if(p.status === 'Open for Solutions' || p.status === 'Prototype'){
+        myNotifs.push(['💡', `Universities and students are developing solutions for your problem "${p.title}".`, p.date]);
+      } else if(p.status === 'AI Analyzed'){
+        myNotifs.push(['🤖', `AI analysis completed for your problem "${p.title}" (${p.cat}).`, p.date]);
+      } else {
+        myNotifs.push(['📝', `Your problem "${p.title}" was submitted and is in the ECHELON pipeline.`, p.date]);
+      }
+    });
+
+    return `<div class="card" style="padding:6px 20px;">
+      ${myNotifs.slice(0, limit).map(it=>`
+        <div class="notif-row">
+          <div class="notif-icon">${it[0]}</div>
+          <div class="notif-text"><p>${it[1]}</p><span>${it[2]}</span></div>
+        </div>
+      `).join('')}
+    </div>`;
+  }
+
+  // Demo preview for visitors who are not logged in
+  const demoItems = [
+    ["🤖","[Demo] Problem ECH-C001064B (Broken hand pump) was analyzed by AI.","Recent"],
+    ["🏛️","[Demo] 3 universities matched to Water Supply problems in Ranchi.","1 day ago"],
+    ["💡","[Demo] Student Team Aquasense submitted a prototype idea.","2 days ago"],
   ];
-  return `<div class="card" style="padding:6px 20px;">${items.slice(0,n).map(it=>`
-    <div class="notif-row"><div class="notif-icon">${it[0]}</div><div class="notif-text"><p>${it[1]}</p><span>${it[2]}</span></div></div>
-  `).join('')}</div>`;
+  return `<div class="card" style="padding:6px 20px;">
+    ${demoItems.slice(0, limit).map(it=>`
+      <div class="notif-row">
+        <div class="notif-icon">${it[0]}</div>
+        <div class="notif-text"><p>${it[1]}</p><span>${it[2]}</span></div>
+      </div>
+    `).join('')}
+  </div>`;
 }
+function notifList(n){ return getNotifications(n); }
+
 function renderNotifications(){
   app.innerHTML = `
   <section class="section wrap">
-    <div class="section-head"><div><h2>Notifications</h2><p>Updates on the problems and projects you're following.</p></div></div>
-    ${notifList(6)}
+    <div class="section-head"><div><h2>Notifications & Pipeline Updates</h2><p>Real-time updates on citizen problems and solutions moving through the pipeline.</p></div></div>
+    ${getNotifications(10)}
   </section>`;
 }
 
