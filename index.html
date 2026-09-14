@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 :root{
   --primary:#0F3D3E;
@@ -99,17 +101,10 @@ header.topbar{
 }
 .mobile-panel a{display:block; padding:14px 0; font-size:17px; border-bottom:1px solid var(--line); color:var(--ink);}
 .mobile-panel .mp-actions{display:flex; gap:10px; margin-top:18px;}
-.user-badge-btn{display:inline-flex; align-items:center; gap:8px; padding:5px 12px; border-radius:24px; border:1.5px solid var(--line); background:var(--paper-raised); cursor:pointer; font-size:13.5px; color:var(--ink); transition:border-color .15s, background .15s;}
-.user-badge-btn:hover{border-color:var(--primary-light); background:var(--paper);}
-.user-avatar-sm{width:26px; height:26px; border-radius:50%; background:var(--primary); color:#fff; font-size:11px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;}
-.user-mobile-card{padding:14px; background:var(--paper-raised); border:1px solid var(--line); border-radius:9px; margin-top:16px;}
-.toast-msg{background:var(--primary); color:#fff; padding:12px 18px; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.18); font-size:13.5px; display:flex; align-items:center; gap:10px; pointer-events:auto; animation:toastIn .25s ease-out;}
-@keyframes toastIn{from{opacity:0; transform:translateY(-8px);} to{opacity:1; transform:translateY(0);}}
-.demo-banner{background:var(--accent-soft); border:1px solid #DFCE9F; color:#6B4E12; padding:12px 16px; border-radius:8px; margin-bottom:24px; font-size:13.5px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;}
 
 @media (max-width:960px){
   .nav-links{display:none;}
-  .nav-actions > .btn-ghost, .nav-actions > .btn-primary, #navAuthArea > .btn-ghost, #navAuthArea > .btn-primary, #navAuthArea .user-badge-btn{display:none;}
+  .nav-actions .btn-ghost, .nav-actions .btn-primary{display:none;}
   .hamburger{display:inline-flex;}
   .mobile-panel.open{display:block;}
 }
@@ -402,6 +397,37 @@ table.lb-table tr:hover td{background:rgba(15,61,62,0.02);}
 .search-cat-label{font-size:12px; font-weight:700; color:var(--ink-soft); margin:26px 0 12px;}
 .search-result-row{display:flex; justify-content:space-between; align-items:center; padding:14px 0; border-bottom:1px solid var(--line); font-size:14px; cursor:pointer;}
 .search-result-row:hover{color:var(--primary);}
+
+/* logged-in nav */
+.user-badge-btn{display:inline-flex; align-items:center; gap:8px; padding:5px 12px; border-radius:24px; border:1.5px solid var(--line); background:var(--paper-raised); cursor:pointer; font-size:13.5px; color:var(--ink); transition:border-color .15s, background .15s;}
+.user-badge-btn:hover{border-color:var(--primary-light); background:var(--paper);}
+.user-avatar-sm{width:26px; height:26px; border-radius:50%; background:var(--primary); color:#fff; font-size:11px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;}
+.user-mobile-card{padding:14px; background:var(--paper-raised); border:1px solid var(--line); border-radius:9px; margin-top:16px;}
+.toast-msg{background:var(--primary); color:#fff; padding:12px 18px; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.18); font-size:13.5px; display:flex; align-items:center; gap:10px; pointer-events:auto; animation:toastIn .25s ease-out;}
+@keyframes toastIn{from{opacity:0; transform:translateY(-8px);} to{opacity:1; transform:translateY(0);}}
+.demo-banner{background:var(--accent-soft); border:1px solid #DFCE9F; color:#6B4E12; padding:12px 16px; border-radius:8px; margin-bottom:24px; font-size:13.5px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;}
+
+/* Modal overlay and verification dialogs */
+.modal-overlay{
+  position:fixed; inset:0; background:rgba(15,61,62,0.65); backdrop-filter:blur(4px);
+  z-index:1000; display:flex; align-items:center; justify-content:center; padding:20px;
+}
+.modal-box{
+  background:var(--paper-raised); border:1px solid var(--line); border-radius:12px;
+  box-shadow:0 24px 48px rgba(15,61,62,0.25); max-width:640px; width:100%; max-height:85vh;
+  display:flex; flex-direction:column; overflow:hidden; animation:modalPop .18s ease-out;
+}
+@keyframes modalPop{ from{transform:scale(0.96); opacity:0;} to{transform:scale(1); opacity:1;} }
+.modal-head{
+  padding:18px 24px; border-bottom:1px solid var(--line); display:flex;
+  justify-content:space-between; align-items:center; background:var(--paper);
+}
+.modal-body{padding:22px 24px; overflow-y:auto;}
+.verif-card{
+  background:var(--paper); border:1px solid var(--line); border-radius:9px;
+  padding:16px; margin-bottom:14px;
+}
+.verif-card:last-child{margin-bottom:0;}
 </style>
 </head>
 <body>
@@ -484,7 +510,9 @@ table.lb-table tr:hover td{background:rgba(15,61,62,0.02);}
   </div>
 </header>
 
+
 <div id="toastContainer" style="position:fixed; top:78px; right:24px; z-index:100; pointer-events:none; display:flex; flex-direction:column; gap:10px;"></div>
+<div id="verificationModal" class="modal-overlay hide" onclick="if(event.target===this)closeVerificationModal()"></div>
 
 <main id="app"></main>
 
@@ -608,7 +636,13 @@ async function fetchCurrentUserProfile(){
         ...data,
         email: u.email,
         phone: u.user_metadata?.phone || '',
-        location: u.user_metadata?.location || ''
+        location: u.user_metadata?.location || '',
+        corp_id: data.corp_id || u.user_metadata?.corp_id || '',
+        aishe_code: data.aishe_code || u.user_metadata?.aishe_code || '',
+        coordinator: data.coordinator || u.user_metadata?.coordinator || '',
+        website: data.website || u.user_metadata?.website || '',
+        is_verified: data.is_verified !== undefined ? data.is_verified : (u.user_metadata?.is_verified !== undefined ? u.user_metadata.is_verified : (['citizen','student'].includes(data.role || u.user_metadata?.role))),
+        verification_status: data.verification_status || u.user_metadata?.verification_status || (['citizen','student'].includes(data.role || u.user_metadata?.role) ? 'verified' : 'pending')
       };
     } else {
       currentUserProfile = {
@@ -620,7 +654,13 @@ async function fetchCurrentUserProfile(){
         skills: u.user_metadata?.skills || [],
         email: u.email,
         phone: u.user_metadata?.phone || '',
-        location: u.user_metadata?.location || ''
+        location: u.user_metadata?.location || '',
+        corp_id: u.user_metadata?.corp_id || '',
+        aishe_code: u.user_metadata?.aishe_code || '',
+        coordinator: u.user_metadata?.coordinator || '',
+        website: u.user_metadata?.website || '',
+        is_verified: u.user_metadata?.is_verified !== undefined ? u.user_metadata.is_verified : (['citizen','student'].includes(u.user_metadata?.role)),
+        verification_status: u.user_metadata?.verification_status || (['citizen','student'].includes(u.user_metadata?.role) ? 'verified' : 'pending')
       };
     }
   } catch(e){
@@ -632,9 +672,26 @@ async function fetchCurrentUserProfile(){
       organization: u.user_metadata?.organization || null,
       department: u.user_metadata?.department || null,
       skills: u.user_metadata?.skills || [],
-      email: u.email
+      email: u.email,
+      corp_id: u.user_metadata?.corp_id || '',
+      aishe_code: u.user_metadata?.aishe_code || '',
+      coordinator: u.user_metadata?.coordinator || '',
+      website: u.user_metadata?.website || '',
+      is_verified: u.user_metadata?.is_verified !== undefined ? u.user_metadata.is_verified : (['citizen','student'].includes(u.user_metadata?.role)),
+      verification_status: u.user_metadata?.verification_status || (['citizen','student'].includes(u.user_metadata?.role) ? 'verified' : 'pending')
     };
   }
+
+  // Check local verification overrides (approved via Admin moderation)
+  try {
+    const localVerifs = JSON.parse(localStorage.getItem('echelon_verifications') || '{}');
+    if (localVerifs && (localVerifs[u.id] || localVerifs[u.email])) {
+      const v = localVerifs[u.id] || localVerifs[u.email];
+      currentUserProfile.is_verified = v.is_verified;
+      currentUserProfile.verification_status = v.verification_status;
+    }
+  } catch(ve){}
+
   return currentUserProfile;
 }
 
@@ -736,7 +793,6 @@ function updateNav(){
       `;
     }
   } else {
-    // Logged out
     if(navAuth){
       navAuth.innerHTML = `
         <a href="#/track" class="btn btn-ghost btn-sm">Track Problem</a>
@@ -789,7 +845,6 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
   }
   updateNav();
 });
-
 /* ============== DATA ============== */
 const DISTRICTS = [
  ["Ranchi",212,58,71,83],["East Singhbhum",184,44,60,80],["West Singhbhum",96,31,29,36],
@@ -850,9 +905,6 @@ async function loadIdeas() {
   return {
     id: p.problem_code || p.id,
     rawId: p.id,
-    citizenId: p.citizen_id,
-    locality: p.locality || '',
-    state: p.state || 'Jharkhand',
     title: p.title,
     description: p.description,
     district: p.district,
@@ -915,6 +967,16 @@ function navigate(){
   const parts = full.split('/');
   const route = parts[0];
   const param = parts[1];
+
+  // Require login before submitting a problem
+  const AUTH_REQUIRED_ROUTES = ['submit'];
+  if(AUTH_REQUIRED_ROUTES.includes(route) && !currentSession?.user){
+    sessionStorage.setItem('echelon_redirect_after_login', hash);
+    showToast('Please log in to submit a problem.');
+    location.hash = '#/login';
+    return;
+  }
+
   document.querySelectorAll('.nav-links a').forEach(a=>a.classList.toggle('active', a.dataset.route===route));
   updateNav();
   const footer = document.getElementById('siteFooter');
@@ -926,7 +988,7 @@ function navigate(){
     problem: ()=>renderProblemDetail(param), project: ()=>renderProjectDetail(param),
     'ai-analysis': renderAIResult, notifications: renderNotifications, search: renderSearch,
     admin: renderAdmin,
-    profile: () => { const h = getRoleDashboardHash(currentUserProfile?.role); location.hash = h; },
+    profile: () => { location.hash = getRoleDashboardHash(currentUserProfile?.role); },
     'dashboard-citizen': renderCitizenProfile,
     'dashboard-student': renderStudentDashboard,
     'dashboard-university': renderUniversityDashboard,
@@ -945,7 +1007,19 @@ document.addEventListener('click', ()=>closeDashDropdown());
 /* ============== SHARED PARTS ============== */
 function statBlock(num,label){return `<div class="stat"><div class="num">${num}</div><div class="lab">${label}</div></div>`;}
 
+function getSimilarReports(p){
+  // Groups problems that share the same category + district as a proxy for "same issue reported by multiple people"
+  return PROBLEMS.filter(x => x.cat === p.cat && x.district === p.district);
+}
+function communityInterestLabel(count){
+  if(count >= 10) return {label:'High', cls:'sev-high'};
+  if(count >= 4) return {label:'Medium', cls:'sev-medium'};
+  return {label:'Low', cls:'sev-low'};
+}
+
 function problemCard(p){
+  const similar = getSimilarReports(p);
+  const interest = communityInterestLabel(similar.length);
   return `<div class="card problem-card" style="cursor:pointer;" onclick="location.hash='#/problem/${p.id}'">
     <div class="pc-top">
       <h4>${p.title}</h4>
@@ -955,6 +1029,7 @@ function problemCard(p){
       <span>${p.district} · Jharkhand</span><span>·</span><span>${p.cat}</span>
     </div>
     <div class="pc-meta">${p.tech.map(t=>`<span class="tag">${t}</span>`).join('')}</div>
+    ${similar.length > 1 ? `<div class="pc-meta"><span class="badge ${interest.cls}"><span class="d"></span>${similar.length} similar reports · ${interest.label} priority</span></div>` : ''}
     <div class="pc-foot">
       <span class="badge ${STATUS_CLASS[p.status]}"><span class="d"></span>${p.status}</span>
       <span>${p.students} students · ${p.solutions} solutions</span>
@@ -1241,21 +1316,30 @@ function renderTrack(){
       <h2 style="font-size:28px;">Track a problem</h2>
       <p class="muted" style="margin-top:8px;">Enter the tracking ID you received after submitting a problem.</p>
       <div style="display:flex; gap:10px; margin-top:22px;">
-        <input type="text" id="trackId" placeholder="e.g. EC-2026-JH-001248" value="EC-2026-JH-001248" style="text-align:center;">
+        <input type="text" id="trackId" placeholder="e.g. EC-2026-JH-001248" style="text-align:center;">
         <button class="btn btn-primary" onclick="renderTrackResult()">Track</button>
       </div>
     </div>
     <div id="trackResult"></div>
   </section>
   `;
-  renderTrackResult();
 }
 function renderTrackResult(){
   const id = document.getElementById('trackId').value.trim();
-  const p = PROBLEMS.find(x=>x.id===id) || PROBLEMS[0];
+  const target = document.getElementById('trackResult');
+  if(!id){ target.innerHTML = ''; return; }
+  const p = PROBLEMS.find(x=>x.id.toLowerCase()===id.toLowerCase());
+  if(!p){
+    target.innerHTML = `
+      <div class="card center" style="max-width:640px; margin:36px auto 0; padding:40px 20px;">
+        <p class="muted" style="font-size:15px;">No problem found with tracking ID <b>${id}</b>.</p>
+        <p class="muted" style="font-size:13px; margin-top:4px;">Double-check the ID from your submission confirmation, or browse all reported problems.</p>
+        <div style="margin-top:16px;"><a href="#/explorer" class="btn btn-primary">Browse Problems</a></div>
+      </div>`;
+    return;
+  }
   const stageIndex = {"New":0,"AI Analyzed":1,"Open for Solutions":2,"Solution Selected":4,"Prototype":5,"Government Review":6,"Pilot":7,"Implemented":7,"Solved":8}[p.status] ?? 2;
   const stages = ["Problem Submitted","AI Analysis","University Matched","Student Solution","Industry Selected","Prototype","Government Evaluation","Implementation","Citizen Feedback"];
-  const target = document.getElementById('trackResult');
   target.innerHTML = `
     <div class="card" style="max-width:640px; margin:36px auto 0;">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
@@ -1279,10 +1363,15 @@ function renderTrackResult(){
 }
 
 /* ============== SUBMIT PROBLEM ============== */
+/* ============== SUBMIT PROBLEM ============== */
+/* ============== SUBMIT PROBLEM ============== */
+const submitData = {title:'',state:'Jharkhand',district:'Ranchi',village:'',pin:'',desc:'',evidence:[],lat:null,lng:null};
+let submitMapInstance = null;
+let submitMapMarker = null;
 let submitStep = 1;
-const submitData = {title:'',state:'Jharkhand',district:'Ranchi',village:'',pin:'',desc:'',evidence:[]};
 function renderSubmit(){
   submitStep = 1;
+  Object.assign(submitData, {title:'',state:'Jharkhand',district:'Ranchi',village:'',pin:'',desc:'',evidence:[],lat:null,lng:null});
   app.innerHTML = `<section class="section wrap"><div id="submitRoot"></div></section>`;
   renderSubmitStep();
 }
@@ -1297,7 +1386,7 @@ function renderSubmitStep(){
   const root = document.getElementById('submitRoot');
   let body = '';
   if(submitStep===1){
-    body = `<div class="field"><label>Problem title</label>
+    body = `<div class="field"><label>Problem title <span style="color:var(--error);">*</span></label>
       <input type="text" id="f_title" placeholder="e.g. Unsafe drinking water in rural village" value="${submitData.title}">
       <div class="hint">Describe the problem in a short, clear sentence.</div></div>`;
   } else if(submitStep===2){
@@ -1306,30 +1395,37 @@ function renderSubmitStep(){
       <div class="field"><label>District</label><select id="f_district">${DISTRICTS.map(d=>`<option ${d[0]===submitData.district?'selected':''}>${d[0]}</option>`).join('')}</select></div>
     </div>
     <div class="row2">
-      <div class="field"><label>Village / City</label><input type="text" id="f_village" value="${submitData.village}" placeholder="e.g. Nagri"></div>
-      <div class="field"><label>Pin code</label><input type="text" id="f_pin" value="${submitData.pin}" placeholder="e.g. 835222"></div>
+      <div class="field"><label>Village / City <span style="color:var(--error);">*</span></label><input type="text" id="f_village" value="${submitData.village}" placeholder="e.g. Nagri"></div>
+      <div class="field"><label>Pin code <span style="color:var(--error);">*</span></label><input type="text" id="f_pin" value="${submitData.pin}" placeholder="e.g. 835222"></div>
     </div>
-    <div class="field"><label>Map location</label>
-      <div style="height:140px; border:1px dashed var(--line); border-radius:9px; display:flex; align-items:center; justify-content:center; color:var(--ink-soft); font-size:13px;">Map pin placement (tap to set location)</div>
+    <div class="field"><label>Map location <span style="color:var(--error);">*</span></label>
+      <div id="submitMap" style="height:220px; border:1px solid var(--line); border-radius:9px;"></div>
+      <div class="hint" id="mapCoords">${submitData.lat ? `Selected: ${submitData.lat.toFixed(5)}, ${submitData.lng.toFixed(5)}` : 'Click on the map to mark the exact location.'}</div>
     </div>`;
   } else if(submitStep===3){
-    body = `<div class="field"><label>Describe the problem in detail</label>
-      <textarea id="f_desc" placeholder="What is happening, how long has it been a problem, and who is affected?">${submitData.desc}</textarea></div>`;
+    body = `<div class="field"><label>Describe the problem in detail <span style="color:var(--error);">*</span></label>
+      <textarea id="f_desc" placeholder="What is happening, how long has it been a problem, and who is affected? (minimum 20 characters)">${submitData.desc}</textarea></div>`;
   } else if(submitStep===4){
-    body = `<div class="field"><label>Add evidence</label>
+    body = `<div class="field"><label>Add evidence <span style="color:var(--error);">*</span></label>
       <div class="evidence-row">
-        <div class="evidence-tile">📷<br>Upload Image</div>
-        <div class="evidence-tile">🎥<br>Upload Video</div>
-        <div class="evidence-tile">🎙️<br>Voice Note</div>
-        <div class="evidence-tile">📄<br>Document</div>
+        <div class="evidence-tile" onclick="document.getElementById('ev_image').click()">📷<br>Upload Image
+          <input type="file" id="ev_image" accept="image/*" style="display:none" onchange="handleEvidenceFile(this,'image')"></div>
+        <div class="evidence-tile" onclick="document.getElementById('ev_video').click()">🎥<br>Upload Video
+          <input type="file" id="ev_video" accept="video/*" style="display:none" onchange="handleEvidenceFile(this,'video')"></div>
+        <div class="evidence-tile" onclick="document.getElementById('ev_audio').click()">🎙️<br>Voice Note
+          <input type="file" id="ev_audio" accept="audio/*" style="display:none" onchange="handleEvidenceFile(this,'audio')"></div>
+        <div class="evidence-tile" onclick="document.getElementById('ev_doc').click()">📄<br>Document
+          <input type="file" id="ev_doc" accept=".pdf,.doc,.docx" style="display:none" onchange="handleEvidenceFile(this,'document')"></div>
       </div>
-      <div class="hint">Evidence helps AI analysis and university matching be more accurate.</div></div>`;
+      <div id="evidenceList" style="margin-top:10px; font-size:13px;"></div>
+      <div class="hint">At least one piece of evidence is required — this helps AI analysis and university matching be more accurate.</div></div>`;
   } else if(submitStep===5){
     body = `
       <div class="review-row"><span>Problem title</span><span>${submitData.title || '—'}</span></div>
       <div class="review-row"><span>Location</span><span>${submitData.village||'—'}, ${submitData.district}, ${submitData.state}</span></div>
+      <div class="review-row"><span>Map coordinates</span><span>${submitData.lat ? submitData.lat.toFixed(5)+', '+submitData.lng.toFixed(5) : '—'}</span></div>
       <div class="review-row"><span>Description</span><span style="max-width:60%; text-align:right;">${(submitData.desc||'—').slice(0,80)}${submitData.desc.length>80?'…':''}</span></div>
-      <div class="review-row"><span>Evidence</span><span>${submitData.evidence.length || 0} file(s) attached</span></div>
+      <div class="review-row"><span>Evidence</span><span>${submitData.evidence.length} file(s) attached</span></div>
       <div class="ai-note">🤖 After submission, AI will analyze this problem for category, severity and required technologies — final decisions stay with universities, industry and government.</div>
     `;
   }
@@ -1338,55 +1434,124 @@ function renderSubmitStep(){
     ${stepper()}
     <div class="form-card card">
       ${body}
+      <p id="stepError" style="color:var(--error); font-size:13px; margin-top:8px;"></p>
       <div class="form-nav">
         <button class="btn btn-ghost" ${submitStep===1?'disabled style="visibility:hidden;"':''} onclick="submitPrev()">Back</button>
         ${submitStep<5 ? `<button class="btn btn-primary" onclick="submitNext()">Continue</button>` : `<button class="btn btn-accent" onclick="submitFinal()">Submit Problem</button>`}
       </div>
     </div>
   `;
+  if(submitStep===2) initSubmitMap();
+  if(submitStep===4) renderEvidenceList();
 }
+
+function initSubmitMap(){
+  setTimeout(()=>{
+    const mapEl = document.getElementById('submitMap');
+    if(!mapEl || typeof L === 'undefined') return;
+    const startLat = submitData.lat || 23.3441;
+    const startLng = submitData.lng || 85.3096;
+    submitMapInstance = L.map('submitMap').setView([startLat, startLng], submitData.lat ? 13 : 7);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(submitMapInstance);
+    if(submitData.lat){ submitMapMarker = L.marker([submitData.lat, submitData.lng]).addTo(submitMapInstance); }
+    submitMapInstance.on('click', function(e){
+      submitData.lat = e.latlng.lat;
+      submitData.lng = e.latlng.lng;
+      if(submitMapMarker){ submitMapMarker.setLatLng(e.latlng); }
+      else { submitMapMarker = L.marker(e.latlng).addTo(submitMapInstance); }
+      document.getElementById('mapCoords').textContent = `Selected: ${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`;
+      document.getElementById('stepError').textContent = '';
+    });
+    setTimeout(()=>submitMapInstance.invalidateSize(), 200);
+  }, 50);
+}
+
+function handleEvidenceFile(input, type){
+  if(input.files && input.files[0]){
+    submitData.evidence.push({type, name: input.files[0].name, file: input.files[0]});
+    renderEvidenceList();
+    document.getElementById('stepError').textContent = '';
+  }
+}
+function renderEvidenceList(){
+  const el = document.getElementById('evidenceList');
+  if(!el) return;
+  el.innerHTML = submitData.evidence.map((e,i)=>`<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0;">
+    <span>${e.type==='image'?'📷':e.type==='video'?'🎥':e.type==='audio'?'🎙️':'📄'} ${e.name}</span>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="removeEvidence(${i})">Remove</button>
+  </div>`).join('');
+}
+function removeEvidence(i){ submitData.evidence.splice(i,1); renderEvidenceList(); }
+
 function collectStep(){
   if(submitStep===1) submitData.title = document.getElementById('f_title').value;
   if(submitStep===2){ submitData.state=document.getElementById('f_state').value; submitData.district=document.getElementById('f_district').value; submitData.village=document.getElementById('f_village').value; submitData.pin=document.getElementById('f_pin').value; }
   if(submitStep===3) submitData.desc = document.getElementById('f_desc').value;
 }
-function submitNext(){ collectStep(); submitStep++; renderSubmitStep(); }
+function validateCurrentStep(){
+  if(submitStep===1){
+    if(!document.getElementById('f_title').value.trim()) return 'Problem title is required.';
+  }
+  if(submitStep===2){
+    if(!document.getElementById('f_village').value.trim()) return 'Village / City is required.';
+    if(!document.getElementById('f_pin').value.trim()) return 'Pin code is required.';
+    if(!submitData.lat) return 'Please click on the map to mark the location.';
+  }
+  if(submitStep===3){
+    const desc = document.getElementById('f_desc').value.trim();
+    if(!desc || desc.length < 20) return 'Please provide a description of at least 20 characters.';
+  }
+  if(submitStep===4){
+    if(!submitData.evidence.length) return 'At least one piece of evidence (photo, video, voice note, or document) is required.';
+  }
+  return null;
+}
+function submitNext(){
+  collectStep();
+  const err = validateCurrentStep();
+  if(err){ document.getElementById('stepError').textContent = err; return; }
+  submitStep++;
+  renderSubmitStep();
+}
 function submitPrev(){ collectStep(); submitStep--; renderSubmitStep(); }
+
 async function submitFinal(){
   const root = document.getElementById('submitRoot');
   root.innerHTML = `<div class="card center" style="padding:50px;"><p class="muted">Submitting your problem…</p></div>`;
 
   try {
     const res = await fetch(`${API_URL}/api/problems`, {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${currentSession?.access_token || ''}`
-  },
-  body: JSON.stringify({
-        title: submitData.title,
-        description: submitData.desc,
-        state: submitData.state,
-        district: submitData.district,
-        locality: submitData.village
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentSession?.access_token || ''}` },
+      body: JSON.stringify({
+        title: submitData.title, description: submitData.desc, state: submitData.state,
+        district: submitData.district, locality: submitData.village
       })
     });
 
-        if (!res.ok) throw new Error('Request failed: ' + res.status);
+    if (!res.ok) {
+      let msg = 'Request failed: ' + res.status;
+      try { const errData = await res.json(); if(errData.error) msg = errData.error; } catch(_){}
+      throw new Error(msg);
+    }
     const created = await res.json();
 
-    // Auto-trigger AI analysis in the background (don't block the success screen)
+    for(const ev of submitData.evidence){
+      fetch(`${API_URL}/api/problems/${created.id}/evidence`, {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${currentSession?.access_token || ''}` },
+        body: JSON.stringify({ evidence_type: ev.type, storage_path: `pending-upload/${ev.name}`, caption: ev.name })
+      }).catch(err => console.error('Evidence registration failed', err));
+    }
+
     fetch(`${API_URL}/api/problems/${created.id}/analyze`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${currentSession?.access_token || ''}`
-      }
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentSession?.access_token || ''}` }
     }).catch(e => console.error('AI analysis failed', e));
 
     root.innerHTML = `
-
-    
       <div class="card success-box">
         <div style="font-size:38px;">✓</div>
         <h3 style="font-size:22px; margin-top:10px;">Problem submitted successfully</h3>
@@ -1399,12 +1564,15 @@ async function submitFinal(){
         </div>
       </div>
     `;
-    refreshProblemsData(); // refresh the list in the background, without re-rendering // refresh the list in the background
+    refreshProblemsData();
   } catch (e) {
     console.error(e);
-    root.innerHTML = `<div class="card center" style="padding:50px;"><p class="muted">Something went wrong submitting your problem. Please check the backend is running and try again.</p></div>`;
+    root.innerHTML = `<div class="card center" style="padding:50px;"><p class="muted">${e.message || 'Something went wrong submitting your problem.'}</p><button class="btn btn-ghost" style="margin-top:16px;" onclick="renderSubmitStep()">Go back</button></div>`;
   }
 }
+       
+    
+      
 
 /* ============== LEADERBOARD ============== */
 let lbTab = 'students';
@@ -1516,7 +1684,7 @@ async function doLogin(){
   try {
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if (error) {
-      errEl.textContent = error.message;
+      errEl.innerHTML = `${error.message} — New to ECHELON? <a href="#/register" style="color:var(--primary); font-weight:600;">Register here</a>.`;
       if(btn){ btn.disabled = false; btn.textContent = 'Login'; }
       return;
     }
@@ -1524,8 +1692,14 @@ async function doLogin(){
     await fetchCurrentUserProfile();
     updateNav();
     showToast(`Welcome back, ${currentUserProfile?.full_name || 'User'}!`);
-    const targetHash = getRoleDashboardHash(currentUserProfile?.role);
-    location.hash = targetHash || '#/home';
+    const savedRedirect = sessionStorage.getItem('echelon_redirect_after_login');
+    if(savedRedirect){
+      sessionStorage.removeItem('echelon_redirect_after_login');
+      location.hash = savedRedirect;
+    } else {
+      const targetHash = getRoleDashboardHash(currentUserProfile?.role);
+      location.hash = targetHash || '#/home';
+    }
   } catch(e){
     errEl.textContent = 'Login error: ' + e.message;
     if(btn){ btn.disabled = false; btn.textContent = 'Login'; }
@@ -1535,11 +1709,44 @@ async function doLogin(){
 /* ============== REGISTER ============== */
 let regRole = null;
 const ROLE_FIELDS = {
-  Citizen: [["Name","text","name"],["Email","email","email"],["Phone","tel","phone"],["Location","text","location"]],
-  Student: [["Name","text","name"],["Email","email","email"],["University","text","university"],["Department","text","department"],["Skills","text","skills"],["Technologies","text","technologies"]],
-  University: [["University name","text","name"],["Department","text","department"],["Location","text","location"],["Official email","email","email"]],
-  Industry: [["Company name","text","name"],["Industry","text","industry"],["Technology areas","text","tech_areas"],["Official email","email","email"]],
-  Government: [["Department","text","department"],["Authority","text","authority"],["Jurisdiction","text","jurisdiction"],["Official email","email","email"]],
+  Citizen: [
+    ["Full name", "text", "name", "e.g. Rekha Kumari"],
+    ["Email address", "email", "email", "name@example.com"],
+    ["Phone number", "tel", "phone", "+91 98765 43210"],
+    ["District / Location", "text", "location", "e.g. Nagri, Ranchi"]
+  ],
+  Student: [
+    ["Full name", "text", "name", "e.g. Ananya Kujur"],
+    ["Academic email", "email", "email", "name@bitmesra.ac.in"],
+    ["University / College", "text", "university", "e.g. BIT Mesra, Ranchi"],
+    ["Department", "text", "department", "e.g. Computer Science & Engineering"],
+    ["Key skills", "text", "skills", "e.g. React, Python, Embedded Systems"],
+    ["Technology focus", "text", "technologies", "e.g. AI/ML, IoT, CleanTech"]
+  ],
+  University: [
+    ["Institution / University name", "text", "name", "e.g. Birla Institute of Technology, Mesra"],
+    ["AISHE / UGC code", "text", "aishe_code", "e.g. U-0205 or Univ. Reg. No.", "Official accreditation reference code for verification"],
+    ["Dean / Nodal officer name", "text", "coordinator", "e.g. Dr. A. K. Sharma (Dean, R&D)"],
+    ["Official institutional email", "email", "email", "e.g. dean.rnd@bitmesra.ac.in", "Must use your official university domain (.ac.in / .edu)"],
+    ["Campus location", "text", "location", "e.g. Ranchi, Jharkhand"],
+    ["Official website URL", "text", "website", "https://www.bitmesra.ac.in"]
+  ],
+  Industry: [
+    ["Company / Enterprise name", "text", "name", "e.g. Tata Steel Foundation / Tata Power"],
+    ["CIN / GSTIN / Reg. Number", "text", "corp_id", "e.g. U27100JH... or 20AAACT...", "Corporate registration identifier for verification"],
+    ["Authorized coordinator / Lead", "text", "coordinator", "e.g. R. K. Verma (Head of CSR & Innovation)"],
+    ["Industry sector", "text", "industry", "e.g. Manufacturing, Clean Energy, IT, Mining"],
+    ["Technology focus areas", "text", "tech_areas", "e.g. IoT, Water Purification, Solar Microgrids"],
+    ["Official corporate email", "email", "email", "e.g. csr.innovation@tatasteel.com", "Must use official corporate domain (public webmail not allowed)"],
+    ["Corporate website URL", "text", "website", "https://www.tatasteel.com"]
+  ],
+  Government: [
+    ["Department / Directorate", "text", "name", "e.g. Dept. of Drinking Water and Sanitation"],
+    ["Portal Ref / Nodal Agency ID", "text", "corp_id", "e.g. GOV-JH-DWSD-2026", "Government agency reference number"],
+    ["Nodal officer name", "text", "coordinator", "e.g. S. Soren, IAS / Executive Engineer"],
+    ["Jurisdiction / District", "text", "jurisdiction", "e.g. Ranchi & Khunti Districts"],
+    ["Official government email", "email", "email", "e.g. dwsd.ranchi@jharkhand.gov.in", "Must use official .gov.in or .nic.in domain"]
+  ],
 };
 const ROLE_ICON = {Citizen:'🧑',Student:'🎓',University:'🏛️',Industry:'🏭',Government:'🏢'};
 function renderRegister(){
@@ -1581,12 +1788,26 @@ function renderRegRoleStep(){
 function selectRole(r){
   regRole = r;
   const fields = ROLE_FIELDS[r];
+  const isInstitutional = ['University', 'Industry', 'Government'].includes(r);
   document.getElementById('regBox').innerHTML = `
     <button class="btn btn-ghost btn-sm" style="margin-bottom:16px;" onclick="renderRegRoleStep()">← Change role</button>
     <h3 style="font-size:20px;">Register as ${r}</h3>
     <p class="muted" style="font-size:13.5px; margin-top:4px;">Step 2 of 2 — a few details to set up your ${r.toLowerCase()} profile.</p>
-    <div style="margin-top:20px;">
-      ${fields.map(f=>`<div class="field"><label>${f[0]}</label><input type="${f[1]}" id="reg_${f[2]}" placeholder="${f[0]}"></div>`).join('')}
+
+    ${isInstitutional ? `
+      <div style="background:var(--accent-soft); border-left:3px solid var(--accent); padding:11px 14px; border-radius:6px; margin:16px 0 10px; font-size:12.5px; color:#5c430e; line-height:1.45;">
+        🛡️ <b>Institutional Verification Required:</b> ${r} accounts must register with official organizational credentials. Unverified accounts undergo administrative review before full project sponsorship & idea selection permissions are activated.
+      </div>
+    ` : ''}
+
+    <div style="margin-top:18px;">
+      ${fields.map(f=>`
+        <div class="field">
+          <label>${f[0]}</label>
+          <input type="${f[1]}" id="reg_${f[2]}" placeholder="${f[3] || ''}">
+          ${f[4] ? `<div class="hint">${f[4]}</div>` : ''}
+        </div>
+      `).join('')}
       <div class="field"><label>Password</label><input type="password" id="reg_password" placeholder="••••••••"></div>
     </div>
     <p id="regError" style="color:var(--error); font-size:13px;"></p>
@@ -1607,10 +1828,38 @@ async function submitRegistration(){
   const raw = {};
   fields.forEach(f => { raw[f[2]] = document.getElementById(`reg_${f[2]}`)?.value?.trim() || ''; });
 
+  // Institutional credential validation
+  if(['University', 'Industry', 'Government'].includes(regRole)){
+    const domain = email.split('@')[1]?.toLowerCase() || '';
+    const freeDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'rediffmail.com', 'mail.com', 'aol.com'];
+    if(freeDomains.includes(domain)){
+      errEl.textContent = `Official institutional email required. Please register using your corporate or university domain (free domains like @${domain} cannot be verified).`;
+      return;
+    }
+    if(regRole === 'University' && !raw.aishe_code){
+      errEl.textContent = 'Please provide the AISHE / UGC code or University Registration Number for verification.';
+      return;
+    }
+    if(regRole === 'Industry' && !raw.corp_id){
+      errEl.textContent = 'Please provide your Company CIN, GSTIN, or official Registration Number for verification.';
+      return;
+    }
+    if(regRole === 'Government' && !raw.corp_id){
+      errEl.textContent = 'Please provide your Department Reference or Agency ID.';
+      return;
+    }
+    if(!raw.coordinator){
+      errEl.textContent = 'Please provide the authorized coordinator / nodal officer name.';
+      return;
+    }
+  }
+
   const btn = document.querySelector('#regBox button.btn-primary');
   if(btn){ btn.disabled = true; btn.textContent = 'Creating account...'; }
 
-  const orgValue = raw.university || raw.industry || raw.name || null;
+  const isVerifiedDefault = ['Citizen', 'Student'].includes(regRole);
+  const orgValue = raw.university || raw.name || null;
+
   const userMetadata = {
     role: regRole.toLowerCase(),
     full_name: raw.name || '',
@@ -1618,6 +1867,12 @@ async function submitRegistration(){
     department: raw.department || '',
     phone: raw.phone || '',
     location: raw.location || raw.jurisdiction || '',
+    corp_id: raw.corp_id || '',
+    aishe_code: raw.aishe_code || '',
+    coordinator: raw.coordinator || '',
+    website: raw.website || '',
+    is_verified: isVerifiedDefault,
+    verification_status: isVerifiedDefault ? 'verified' : 'pending',
     skills: raw.skills ? raw.skills.split(',').map(s=>s.trim()).filter(Boolean) : [],
     technologies: raw.technologies ? raw.technologies.split(',').map(s=>s.trim()).filter(Boolean) : []
   };
@@ -1634,6 +1889,26 @@ async function submitRegistration(){
       return;
     }
 
+    // Record institutional registration into pending queue for Admin moderation review
+    if(!isVerifiedDefault){
+      try {
+        const pending = JSON.parse(localStorage.getItem('echelon_pending_institutions') || '[]');
+        pending.push({
+          id: data.user?.id || ('inst_' + Date.now()),
+          name: raw.name || 'Institution',
+          role: regRole.toLowerCase(),
+          email: email,
+          corp_id: raw.corp_id || raw.aishe_code || 'Pending ID',
+          coordinator: raw.coordinator || 'Coordinator',
+          website: raw.website || '',
+          location: raw.location || raw.jurisdiction || 'Jharkhand',
+          submitted_at: new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }),
+          status: 'pending'
+        });
+        localStorage.setItem('echelon_pending_institutions', JSON.stringify(pending));
+      } catch(pe){}
+    }
+
     // If confirmation email is required by Supabase and no active session returned
     if(!data.session && data.user){
       document.getElementById('regBox').innerHTML = `
@@ -1642,6 +1917,11 @@ async function submitRegistration(){
           <h3 style="font-size:22px; margin-top:12px;">Account created successfully!</h3>
           <p class="muted" style="margin-top:8px; font-size:14px;">We've sent a confirmation email to <b>${email}</b>.</p>
           <p class="muted" style="margin-top:4px; font-size:13.5px;">Please verify your email address to activate your <b>${regRole}</b> account.</p>
+          ${!isVerifiedDefault ? `
+            <div style="margin-top:16px; background:var(--accent-soft); border-left:3px solid var(--accent); padding:10px 14px; text-align:left; font-size:13px; color:#5c430e; border-radius:6px;">
+              🛡️ Note: As a ${regRole}, your institutional verification is marked <b>Pending Review</b>. Our administrative team will verify your credentials shortly.
+            </div>
+          ` : ''}
           <div style="margin-top:24px;">
             <a href="#/login" class="btn btn-primary" style="display:inline-flex;">Proceed to Login</a>
           </div>
@@ -1652,16 +1932,13 @@ async function submitRegistration(){
 
     currentSession = data.session;
 
-    // Trigger sets role + full_name — update additional fields in profiles table
-    const profilePatch = {
-      role: regRole.toLowerCase(),
-      full_name: raw.name || ''
-    };
+    // Trigger only sets role + full_name — fill in the rest ourselves.
+    const profilePatch = {};
     if (orgValue) profilePatch.organization = orgValue;
     if (raw.department) profilePatch.department = raw.department;
     if (userMetadata.skills.length) profilePatch.skills = userMetadata.skills;
 
-    if (data.user?.id) {
+    if (data.user?.id && Object.keys(profilePatch).length) {
       try {
         await supabaseClient.from('profiles').update(profilePatch).eq('id', data.user.id);
       } catch(pe){
@@ -1673,7 +1950,6 @@ async function submitRegistration(){
     updateNav();
     showToast(`Welcome to ECHELON, ${currentUserProfile?.full_name || raw.name || 'User'}!`);
 
-    // Redirect directly to the user's role dashboard
     const targetHash = getRoleDashboardHash(regRole.toLowerCase());
     location.hash = targetHash;
   } catch(e){
@@ -1690,13 +1966,6 @@ function renderCitizenProfile(){
   const loc = isAuth ? (currentUserProfile?.location || 'Jharkhand, India') : 'Nagri, Ranchi · Jharkhand';
   const myProblems = isAuth ? PROBLEMS.filter(p => p.citizenId === currentSession.user.id) : PROBLEMS.slice(0,3);
   const solvedCount = myProblems.filter(p => p.status === 'Solved').length;
-  const platformTotal = PROBLEMS.length;
-  const platformSolved = PROBLEMS.filter(p => p.status === 'Solved').length;
-
-  // Real problems reported by other citizens from the database
-  const communityProblems = isAuth
-    ? PROBLEMS.filter(p => p.citizenId !== currentSession.user.id)
-    : PROBLEMS;
 
   app.innerHTML = `
   <section class="wrap">
@@ -1722,51 +1991,32 @@ function renderCitizenProfile(){
       </div>
     </div>
     <div class="kpi-row">
-      <div class="kpi-card"><div class="num">${isAuth ? myProblems.length : 5}</div><div class="lab">My problems reported</div></div>
-      <div class="kpi-card"><div class="num">${isAuth ? solvedCount : 2}</div><div class="lab">My problems solved</div></div>
-      <div class="kpi-card"><div class="num">${platformTotal}</div><div class="lab">Total community problems</div></div>
-      <div class="kpi-card"><div class="num">${platformSolved}</div><div class="lab">Total problems solved</div></div>
+      <div class="kpi-card"><div class="num">${isAuth ? myProblems.length : 5}</div><div class="lab">Problems reported</div></div>
+      <div class="kpi-card"><div class="num">${isAuth ? solvedCount : 2}</div><div class="lab">Problems solved</div></div>
+      <div class="kpi-card"><div class="num">${isAuth ? 0 : 3}</div><div class="lab">Feedback given</div></div>
+      <div class="kpi-card"><div class="num">${isAuth ? (myProblems.length * 150) : '1,240'}</div><div class="lab">Impact created (residents)</div></div>
     </div>
   </section>
-
   <section class="wrap" style="padding-bottom:60px;">
-    <div class="section-head">
-      <div>
-        <h2 style="font-size:20px;">My reported problems</h2>
-        <p>Problems you have personally submitted to the ECHELON pipeline.</p>
-      </div>
-    </div>
+    <div class="section-head"><div><h2 style="font-size:20px;">My reported problems</h2></div></div>
     ${myProblems.length > 0 ? `<div class="grid-3">${myProblems.map(problemCard).join('')}</div>` : `
-      <div class="card center" style="padding:36px 20px;">
-        <div style="font-size:28px; margin-bottom:8px;">📝</div>
-        <p class="muted" style="font-size:15px; font-weight:600; color:var(--ink);">You haven't reported any problems yet (0)</p>
-        <p class="muted" style="font-size:13px; max-width:48ch; margin:6px auto 16px;">Notice an issue with drinking water, road maintenance, school facilities, or sanitation in your locality? Report it to route it to solvers.</p>
-        <a href="#/submit" class="btn btn-primary">+ Submit a Problem</a>
+      <div class="card center" style="padding:40px 20px;">
+        <p class="muted" style="font-size:15px;">You haven't submitted any problems yet.</p>
+        <p class="muted" style="font-size:13px; margin-top:4px;">Report an issue in your locality to start solving real-world challenges.</p>
+        <div style="margin-top:16px;">
+          <a href="#/submit" class="btn btn-primary">+ Submit a Problem</a>
+        </div>
       </div>
     `}
-
-    <div class="section-head" style="margin-top:44px;">
-      <div>
-        <h2 style="font-size:20px;">Community problems reported by others</h2>
-        <p>Real problems submitted by citizens across Jharkhand currently in the pipeline (${platformTotal} total reported in database).</p>
-      </div>
-      <a href="#/explorer" class="pill-link">Explore all ${platformTotal} problems →</a>
-    </div>
-    ${communityProblems.length > 0 ? `
-      <div class="grid-3">
-        ${communityProblems.slice(0, 6).map(problemCard).join('')}
-      </div>
-    ` : `
-      <div class="card center" style="padding:30px;"><p class="muted">No community problems reported yet.</p></div>
-    `}
-
-    <div class="section-head" style="margin-top:44px;">
-      <div>
-        <h2 style="font-size:20px;">Pipeline Notifications & Updates</h2>
-        <p>${myProblems.length > 0 ? 'Live status updates on your submitted problems.' : 'Live platform updates from problems reported across Jharkhand.'}</p>
-      </div>
-    </div>
-    ${getNotifications(5)}
+    ${myProblems.length > 0 ? `
+    <div class="section-head" style="margin-top:40px;"><div><h2 style="font-size:20px;">By category</h2></div></div>
+    <div class="card" style="padding:0; overflow-x:auto;"><table class="lb-table"><thead><tr><th>Category</th><th>Reported</th><th>Solved</th></tr></thead><tbody>
+      ${Object.entries(myProblems.reduce((acc,p)=>{ acc[p.cat] = acc[p.cat] || {total:0, solved:0}; acc[p.cat].total++; if(p.status==='Solved') acc[p.cat].solved++; return acc; }, {}))
+        .map(([cat,v])=>`<tr><td>${cat}</td><td>${v.total}</td><td>${v.solved}</td></tr>`).join('')}
+    </tbody></table></div>
+    ` : ''}
+    <div class="section-head" style="margin-top:40px;"><div><h2 style="font-size:20px;">Notifications</h2></div></div>
+    ${notifList(3)}
   </section>`;
 }
 
@@ -1811,7 +2061,7 @@ function renderStudentDashboard(){
   <section class="wrap" style="padding-bottom:60px;">
     <div class="section-head"><div><h2 style="font-size:20px;">Problems matching your skills</h2><p>Ranked by skill and technology fit to your profile.</p></div></div>
     <div class="card" id="matchesCard" style="padding:6px 20px;"><p class="muted" style="padding:16px 0;">Loading matches…</p></div>
-    <div class="section-head" style="margin-top:40px;"><div><h2 style="font-size:20px;">Active student projects</h2></div></div>
+    <div class="section-head" style="margin-top:40px;"><div><h2 style="font-size:20px;">My active projects</h2></div></div>
     <div class="grid-3">${IDEAS.slice(0,2).map(ideaCard).join('')}</div>
   </section>`;
   loadMyMatches();
@@ -1874,6 +2124,7 @@ function renderUniversityDashboard(){
   const name = (isAuth && (currentUserProfile?.organization || currentUserProfile?.full_name)) ? (currentUserProfile.organization || currentUserProfile.full_name) : 'BIT Mesra';
   const initials = getInitials(name);
   const dept = isAuth ? (currentUserProfile?.department || 'Innovation Cell & Research') : 'CSE · ECE · Mechanical · Civil';
+  const isVerified = !isAuth ? true : (currentUserProfile?.is_verified !== false);
 
   app.innerHTML = `
   <section class="wrap">
@@ -1888,11 +2139,35 @@ function renderUniversityDashboard(){
         <button class="btn btn-ghost btn-sm" onclick="handleSignOut()">Sign Out</button>
       </div>
     `}
+
+    ${isAuth && !isVerified ? `
+      <div class="card" style="border-left:4px solid var(--warning); background:#FFFDF5; margin-bottom:24px; padding:18px 20px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span class="badge st-analyzed" style="background:#FFF0D4; color:#8A5314;"><span class="d" style="background:#B8792F;"></span>Pending Accreditation Verification</span>
+              <span class="mono" style="font-size:12px; color:var(--ink-soft);">AISHE: ${currentUserProfile?.aishe_code || 'Under Review'}</span>
+            </div>
+            <h3 style="font-size:16px; margin-top:8px; color:var(--ink);">Institutional credentials submitted for administrative verification</h3>
+            <p class="muted" style="font-size:13.5px; margin-top:4px; max-width:65ch;">
+              Your university profile for <b>${name}</b> has been registered. While the ECHELON board verifies your institution's AISHE/UGC accreditation and domain credentials, you can explore problems and mentor teams. Official student solution endorsements will be enabled once verified.
+            </p>
+          </div>
+          <div style="text-align:right;">
+            <span class="badge" style="background:var(--paper); border:1px solid var(--line); font-size:12px;">Nodal Officer: ${currentUserProfile?.coordinator || 'Institutional Lead'}</span>
+          </div>
+        </div>
+      </div>
+    ` : ''}
+
     <div class="profile-head">
       <div class="profile-avatar">${initials}</div>
       <div>
         <h2 style="font-size:22px;">${name}</h2>
-        <div class="profile-meta"><span>${dept}</span> · <span class="badge st-analyzed"><span class="d"></span>University</span></div>
+        <div class="profile-meta">
+          <span>${dept}</span> · 
+          ${isAuth ? (isVerified ? '<span class="badge" style="background:#EBF5F0; color:var(--success);"><span class="d" style="background:var(--success);"></span>Verified Institution ✓</span>' : '<span class="badge st-analyzed" style="background:#FFF0D4; color:#8A5314;"><span class="d" style="background:#B8792F;"></span>Pending Verification</span>') : '<span class="badge st-analyzed"><span class="d"></span>University</span>'}
+        </div>
       </div>
       <div class="impact-score"><div class="val">${isAuth ? '1,200' : '3,120'}</div><div class="lab">Credits · Active</div></div>
     </div>
@@ -1919,6 +2194,7 @@ function renderIndustryDashboard(){
   const name = (isAuth && (currentUserProfile?.organization || currentUserProfile?.full_name)) ? (currentUserProfile.organization || currentUserProfile.full_name) : 'Tata Steel Foundation';
   const initials = getInitials(name);
   const meta = isAuth ? (currentUserProfile?.department || 'CSR & Innovation') : 'CSR & Innovation · IoT · Sensors · Sustainability';
+  const isVerified = !isAuth ? true : (currentUserProfile?.is_verified !== false);
 
   app.innerHTML = `
   <section class="wrap">
@@ -1933,18 +2209,42 @@ function renderIndustryDashboard(){
         <button class="btn btn-ghost btn-sm" onclick="handleSignOut()">Sign Out</button>
       </div>
     `}
+
+    ${isAuth && !isVerified ? `
+      <div class="card" style="border-left:4px solid var(--warning); background:#FFFDF5; margin-bottom:24px; padding:18px 20px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span class="badge st-analyzed" style="background:#FFF0D4; color:#8A5314;"><span class="d" style="background:#B8792F;"></span>Pending Enterprise Verification</span>
+              <span class="mono" style="font-size:12px; color:var(--ink-soft);">CIN/GST: ${currentUserProfile?.corp_id || 'Under Review'}</span>
+            </div>
+            <h3 style="font-size:16px; margin-top:8px; color:var(--ink);">Corporate entity awaiting administrative accreditation</h3>
+            <p class="muted" style="font-size:13.5px; margin-top:4px; max-width:65ch;">
+              Your corporate profile for <b>${name}</b> has been registered. Shortlisting student ideas and selecting ideas to fund into active projects requires an active verified corporate profile.
+            </p>
+          </div>
+          <div style="text-align:right;">
+            <span class="badge" style="background:var(--paper); border:1px solid var(--line); font-size:12px;">Contact: ${currentUserProfile?.coordinator || 'CSR Officer'}</span>
+          </div>
+        </div>
+      </div>
+    ` : ''}
+
     <div class="profile-head">
       <div class="profile-avatar">${initials}</div>
       <div>
         <h2 style="font-size:22px;">${name}</h2>
-        <div class="profile-meta"><span>${meta}</span> · <span class="badge st-selected"><span class="d"></span>Industry Partner</span></div>
+        <div class="profile-meta">
+          <span>${meta}</span> · 
+          ${isAuth ? (isVerified ? '<span class="badge" style="background:#EBF5F0; color:var(--success);"><span class="d" style="background:var(--success);"></span>Verified Industry Partner ✓</span>' : '<span class="badge st-analyzed" style="background:#FFF0D4; color:#8A5314;"><span class="d" style="background:#B8792F;"></span>Pending Verification</span>') : '<span class="badge st-selected"><span class="d"></span>Industry Partner</span>'}
+        </div>
       </div>
       <div class="impact-score"><div class="val">${isAuth ? '1,500' : '2,960'}</div><div class="lab">Credits · Active</div></div>
     </div>
     <div class="kpi-row">
-      <div class="kpi-card"><div class="num">${REAL_IDEAS.length || 14}</div><div class="lab">Available ideas</div></div>
-      <div class="kpi-card"><div class="num">${REAL_IDEAS.filter(i=>i.status==='shortlisted').length}</div><div class="lab">Selected ideas</div></div>
-      <div class="kpi-card"><div class="num">${REAL_IDEAS.filter(i=>i.status==='selected').length}</div><div class="lab">Active projects</div></div>
+      <div class="kpi-card"><div class="num">14</div><div class="lab">Available ideas</div></div>
+      <div class="kpi-card"><div class="num">9</div><div class="lab">Selected ideas</div></div>
+      <div class="kpi-card"><div class="num">7</div><div class="lab">Active projects</div></div>
       <div class="kpi-card"><div class="num">${isAuth ? 0 : 4}</div><div class="lab">Products developed</div></div>
     </div>
   </section>
@@ -1992,6 +2292,10 @@ function industryIdeaCard(idea){
 
 async function shortlistIdea(ideaId, status){
   if(!currentSession){ alert('Please log in as an industry partner.'); return; }
+  if(currentUserProfile && currentUserProfile.role === 'industry' && currentUserProfile.is_verified === false){
+    alert('Verification Pending: Your industry profile is awaiting administrative verification. Shortlisting and funding ideas will be unlocked once your corporate credentials are confirmed.');
+    return;
+  }
   try {
     const res = await fetch(`${API_URL}/api/ideas/${ideaId}/shortlist`, {
       method: 'PATCH',
@@ -2007,6 +2311,10 @@ async function shortlistIdea(ideaId, status){
 
 async function selectIdeaForProject(ideaId){
   if(!currentSession){ alert('Please log in as an industry partner.'); return; }
+  if(currentUserProfile && currentUserProfile.role === 'industry' && currentUserProfile.is_verified === false){
+    alert('Verification Pending: Your industry profile is awaiting administrative verification. Project selection will be unlocked once your corporate credentials are confirmed.');
+    return;
+  }
   try {
     const res = await fetch(`${API_URL}/api/projects`, {
       method: 'POST',
@@ -2021,7 +2329,6 @@ async function selectIdeaForProject(ideaId){
     alert('Could not create project: ' + e.message);
   }
 }
-
 /* ============== GOVERNMENT DASHBOARD ============== */
 function renderGovernmentDashboard(){
   const isAuth = Boolean(currentSession?.user);
@@ -2141,9 +2448,187 @@ async function submitGovReview(decision){
   }
 }
 
-/* ============== ADMIN DASHBOARD ============== */
+/* ============== ADMIN DASHBOARD & VERIFICATION SYSTEM ============== */
+const DEFAULT_PENDING_INSTITUTIONS = [
+  {
+    id: 'pend_uni_1',
+    name: 'Birla Institute of Technology, Mesra (Ext. Lalpur)',
+    role: 'university',
+    email: 'lalpur.rnd@bitmesra.ac.in',
+    corp_id: 'U-0205 / EXT-LP-01',
+    coordinator: 'Dr. S. K. Roy (Dean, Research)',
+    website: 'https://www.bitmesra.ac.in/lalpur',
+    location: 'Ranchi, Jharkhand',
+    submitted_at: '14 Sept 2026',
+    status: 'pending'
+  },
+  {
+    id: 'pend_ind_1',
+    name: 'Usha Martin Ltd (Wire Ropes Div)',
+    role: 'industry',
+    email: 'tech.rnd@ushamartin.co.in',
+    corp_id: 'L31400JH1986PLC002300',
+    coordinator: 'Anil Sharma (VP Operations & CSR)',
+    website: 'https://www.ushamartin.com',
+    location: 'Tatisilwai, Ranchi',
+    submitted_at: '13 Sept 2026',
+    status: 'pending'
+  },
+  {
+    id: 'pend_ind_2',
+    name: 'Jindal Steel & Power (Jharkhand CSR Cell)',
+    role: 'industry',
+    email: 'csr.jharkhand@jindalsteel.com',
+    corp_id: 'L27105HR1979PLC009913',
+    coordinator: 'P. K. Verma (CSR Director)',
+    website: 'https://www.jindalsteelpower.com',
+    location: 'Patratu, Ramgarh',
+    submitted_at: '14 Sept 2026',
+    status: 'pending'
+  }
+];
+
+function getAllPendingInstitutions(){
+  let localPending = [];
+  try {
+    localPending = JSON.parse(localStorage.getItem('echelon_pending_institutions') || '[]');
+  } catch(e){}
+  
+  let localVerifs = {};
+  try {
+    localVerifs = JSON.parse(localStorage.getItem('echelon_verifications') || '{}');
+  } catch(e){}
+
+  const all = [...DEFAULT_PENDING_INSTITUTIONS, ...localPending];
+  return all.filter(item => {
+    const v = localVerifs[item.id] || localVerifs[item.email];
+    return !v || v.verification_status === 'pending';
+  });
+}
+
+function getPendingVerificationCount(type){
+  return getAllPendingInstitutions().filter(item => item.role === type).length;
+}
+
+function openVerificationModal(type){
+  const modal = document.getElementById('verificationModal');
+  if(!modal) return;
+  modal.classList.remove('hide');
+  renderVerificationModalContent(type);
+}
+
+function closeVerificationModal(){
+  const modal = document.getElementById('verificationModal');
+  if(modal) modal.classList.add('hide');
+}
+
+function renderVerificationModalContent(type){
+  const modal = document.getElementById('verificationModal');
+  if(!modal) return;
+  const items = getAllPendingInstitutions().filter(i => i.role === type);
+  const typeLabel = type === 'university' ? 'University / Academic Accreditation' : 'Industry / Corporate Verification';
+
+  modal.innerHTML = `
+    <div class="modal-box">
+      <div class="modal-head">
+        <div>
+          <h3 style="font-size:18px;">🛡️ ${typeLabel}</h3>
+          <p class="muted" style="font-size:12.5px; margin:0;">Review institutional credentials, registration numbers, and coordinator contacts.</p>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="closeVerificationModal()" style="font-size:16px; padding:4px 10px;">✕</button>
+      </div>
+      <div class="modal-body">
+        ${items.length === 0 ? `
+          <div class="card center" style="padding:40px 20px;">
+            <div style="font-size:32px; color:var(--success); margin-bottom:8px;">✓</div>
+            <h4 style="font-size:16px;">All pending ${type} verifications completed!</h4>
+            <p class="muted" style="font-size:13px; margin-top:4px;">There are no unverified accounts currently in the moderation queue.</p>
+          </div>
+        ` : items.map(inst => `
+          <div class="verif-card" id="card_${inst.id}">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+              <div>
+                <h4 style="font-size:16px; color:var(--primary); margin:0;">${inst.name}</h4>
+                <div class="pc-meta" style="margin-top:3px;">
+                  <span>📍 ${inst.location}</span> · <span class="mono" style="font-size:12px; font-weight:600; color:var(--accent);">${inst.corp_id}</span>
+                </div>
+              </div>
+              <span class="badge st-analyzed" style="background:#FFF0D4; color:#8A5314;"><span class="d" style="background:#B8792F;"></span>Pending</span>
+            </div>
+            <div style="font-size:13px; color:var(--ink-soft); line-height:1.6; margin-bottom:14px; background:var(--paper-raised); padding:10px 12px; border-radius:6px; border:1px solid var(--line);">
+              <div><b>Authorized Contact:</b> ${inst.coordinator}</div>
+              <div><b>Domain Email:</b> <a href="mailto:${inst.email}" style="color:var(--primary);">${inst.email}</a></div>
+              ${inst.website ? `<div><b>Website:</b> <a href="${inst.website}" target="_blank" rel="noreferrer" style="color:var(--primary); text-decoration:underline;">${inst.website}</a></div>` : ''}
+              <div><b>Submitted:</b> ${inst.submitted_at}</div>
+            </div>
+            <div style="display:flex; gap:10px; justify-content:flex-end;">
+              <button class="btn btn-ghost btn-sm" onclick="rejectInstitution('${inst.id}', '${type}')">Reject</button>
+              <button class="btn btn-primary btn-sm" onclick="approveInstitution('${inst.id}', '${type}')">✓ Approve & Verify</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function approveInstitution(id, type){
+  const items = getAllPendingInstitutions();
+  const inst = items.find(x => x.id === id);
+  if(!inst) return;
+
+  try {
+    const localVerifs = JSON.parse(localStorage.getItem('echelon_verifications') || '{}');
+    localVerifs[inst.id] = { is_verified: true, verification_status: 'verified' };
+    if(inst.email) localVerifs[inst.email] = { is_verified: true, verification_status: 'verified' };
+    localStorage.setItem('echelon_verifications', JSON.stringify(localVerifs));
+  } catch(e){}
+
+  if(currentUserProfile && (currentUserProfile.id === inst.id || currentUserProfile.email === inst.email)){
+    currentUserProfile.is_verified = true;
+    currentUserProfile.verification_status = 'verified';
+  }
+
+  showToast(`${inst.name} has been verified successfully.`);
+  renderVerificationModalContent(type);
+
+  const uniEl = document.getElementById('adminPendingUniCount');
+  if(uniEl) uniEl.textContent = getPendingVerificationCount('university');
+  const indEl = document.getElementById('adminPendingIndCount');
+  if(indEl) indEl.textContent = getPendingVerificationCount('industry');
+}
+
+function rejectInstitution(id, type){
+  const items = getAllPendingInstitutions();
+  const inst = items.find(x => x.id === id);
+  if(!inst) return;
+
+  try {
+    const localVerifs = JSON.parse(localStorage.getItem('echelon_verifications') || '{}');
+    localVerifs[inst.id] = { is_verified: false, verification_status: 'rejected' };
+    if(inst.email) localVerifs[inst.email] = { is_verified: false, verification_status: 'rejected' };
+    localStorage.setItem('echelon_verifications', JSON.stringify(localVerifs));
+  } catch(e){}
+
+  if(currentUserProfile && (currentUserProfile.id === inst.id || currentUserProfile.email === inst.email)){
+    currentUserProfile.is_verified = false;
+    currentUserProfile.verification_status = 'rejected';
+  }
+
+  showToast(`Application for ${inst.name} was rejected.`);
+  renderVerificationModalContent(type);
+
+  const uniEl = document.getElementById('adminPendingUniCount');
+  if(uniEl) uniEl.textContent = getPendingVerificationCount('university');
+  const indEl = document.getElementById('adminPendingIndCount');
+  if(indEl) indEl.textContent = getPendingVerificationCount('industry');
+}
+
 function renderAdmin(){
   const byStatus = STATUSES.map(s=>[s, PROBLEMS.filter(p=>p.status===s).length || Math.floor(Math.random()*40)+5]);
+  const pendingUniCount = getPendingVerificationCount('university');
+  const pendingIndCount = getPendingVerificationCount('industry');
+
   app.innerHTML = `
   <section class="section wrap">
     <div class="section-head"><div><h2>Admin Dashboard</h2><p>Platform-wide oversight, moderation and integrity tools.</p></div></div>
@@ -2179,10 +2664,10 @@ function renderAdmin(){
       <div class="card">
         <div class="mod-row"><span>Verify problem submissions</span><button class="btn btn-ghost btn-sm">Review (6)</button></div>
         <div class="mod-row"><span>Verify students</span><button class="btn btn-ghost btn-sm">Review (3)</button></div>
-        <div class="mod-row"><span>Verify universities</span><button class="btn btn-ghost btn-sm">Review (1)</button></div>
+        <div class="mod-row"><span>Verify universities</span><button class="btn btn-ghost btn-sm" onclick="openVerificationModal('university')">Review (<span id="adminPendingUniCount">${pendingUniCount}</span>)</button></div>
       </div>
       <div class="card">
-        <div class="mod-row"><span>Verify industries</span><button class="btn btn-ghost btn-sm">Review (2)</button></div>
+        <div class="mod-row"><span>Verify industries</span><button class="btn btn-ghost btn-sm" onclick="openVerificationModal('industry')">Review (<span id="adminPendingIndCount">${pendingIndCount}</span>)</button></div>
         <div class="mod-row"><span>Review flagged content</span><button class="btn btn-ghost btn-sm">Review (4)</button></div>
         <div class="mod-row"><span>Manage reports</span><button class="btn btn-ghost btn-sm">Review (2)</button></div>
       </div>
@@ -2197,6 +2682,8 @@ function renderAdmin(){
 /* ============== PROBLEM DETAIL ============== */
 function renderProblemDetail(id){
   const p = PROBLEMS.find(x=>x.id===id) || PROBLEMS[0];
+  const similar = getSimilarReports(p).filter(x => x.id !== p.id);
+  const interest = communityInterestLabel(similar.length + 1);
   app.innerHTML = `
   <section class="section wrap">
     <div class="detail-hero">
@@ -2207,6 +2694,9 @@ function renderProblemDetail(id){
       </div>
       <span class="badge ${STATUS_CLASS[p.status]}" style="font-size:13px; padding:7px 14px;"><span class="d"></span>${p.status}</span>
     </div>
+    ${similar.length > 0 ? `<div class="demo-banner" style="background:#FFF8EA; border-color:#EFDCA6; color:#6B4E12; margin-top:16px;">
+      <span>📍 <b>${similar.length + 1} people</b> have reported a similar <b>${p.cat}</b> issue in <b>${p.district}</b> — flagged as <b>${interest.label} priority</b> based on community interest.</span>
+    </div>` : ''}
     <div class="detail-grid">
       <div>
         <div class="detail-block">
@@ -2434,87 +2924,24 @@ async function addMilestone(projectId){
 }
 
 /* ============== NOTIFICATIONS ============== */
-function getNotifications(limit = 6){
-  const isAuth = Boolean(currentSession?.user);
-  const myProbs = isAuth ? PROBLEMS.filter(p => p.citizenId === currentSession.user.id) : [];
-
-  if(isAuth && myProbs.length === 0){
-    // User is logged in but has not submitted any problems yet:
-    // Show genuine recent platform activity from the database instead of fake "Your problem" notifications!
-    const realUpdates = PROBLEMS.slice(0, limit).map(p => {
-      const icon = p.status === 'Solved' ? '🎉' : p.status === 'AI Analyzed' ? '🤖' : p.status === 'Government Review' ? '🏢' : '📍';
-      return [
-        icon,
-        `[${p.district}] ${p.title} — Status: ${p.status}`,
-        p.date || 'Recent'
-      ];
-    });
-
-    return `
-      <div class="card" style="padding:14px 18px; margin-bottom:14px; background:var(--paper-raised); border-left:3px solid var(--accent);">
-        <div style="font-weight:600; font-size:13.5px; color:var(--primary);">No personal problem notifications yet</div>
-        <div style="font-size:12.5px; color:var(--ink-soft); margin-top:2px;">You haven't submitted any problems yet. Below is live pipeline activity on problems reported across Jharkhand:</div>
-      </div>
-      <div class="card" style="padding:6px 20px;">
-        ${realUpdates.map(it=>`
-          <div class="notif-row">
-            <div class="notif-icon">${it[0]}</div>
-            <div class="notif-text"><p>${it[1]}</p><span>${it[2]}</span></div>
-          </div>
-        `).join('')}
-      </div>
-    `;
-  }
-
-  if(myProbs.length > 0){
-    // Real notifications generated from the user's actual submitted problems!
-    const myNotifs = [];
-    myProbs.forEach(p => {
-      if(p.status === 'Solved'){
-        myNotifs.push(['🎉', `Your problem "${p.title}" (${p.id}) has been implemented and marked as Solved!`, p.date]);
-      } else if(p.status === 'Government Review' || p.status === 'Pilot'){
-        myNotifs.push(['🏢', `Your problem "${p.title}" (${p.id}) is undergoing government review in ${p.district}.`, p.date]);
-      } else if(p.status === 'Open for Solutions' || p.status === 'Prototype'){
-        myNotifs.push(['💡', `Universities and students are developing solutions for your problem "${p.title}".`, p.date]);
-      } else if(p.status === 'AI Analyzed'){
-        myNotifs.push(['🤖', `AI analysis completed for your problem "${p.title}" (${p.cat}).`, p.date]);
-      } else {
-        myNotifs.push(['📝', `Your problem "${p.title}" was submitted and is in the ECHELON pipeline.`, p.date]);
-      }
-    });
-
-    return `<div class="card" style="padding:6px 20px;">
-      ${myNotifs.slice(0, limit).map(it=>`
-        <div class="notif-row">
-          <div class="notif-icon">${it[0]}</div>
-          <div class="notif-text"><p>${it[1]}</p><span>${it[2]}</span></div>
-        </div>
-      `).join('')}
-    </div>`;
-  }
-
-  // Demo preview for visitors who are not logged in
-  const demoItems = [
-    ["🤖","[Demo] Problem ECH-C001064B (Broken hand pump) was analyzed by AI.","Recent"],
-    ["🏛️","[Demo] 3 universities matched to Water Supply problems in Ranchi.","1 day ago"],
-    ["💡","[Demo] Student Team Aquasense submitted a prototype idea.","2 days ago"],
+function notifList(n){
+  const items = [
+    ["✅","Your problem has been analyzed.","2 hours ago"],
+    ["🏛️","3 universities have been matched to your problem.","5 hours ago"],
+    ["💡","Student Team A submitted a solution.","1 day ago"],
+    ["🏭","Industry X selected your idea.","2 days ago"],
+    ["🏢","Your prototype is under government evaluation.","4 days ago"],
+    ["🎉","Your problem has been implemented.","1 week ago"],
   ];
-  return `<div class="card" style="padding:6px 20px;">
-    ${demoItems.slice(0, limit).map(it=>`
-      <div class="notif-row">
-        <div class="notif-icon">${it[0]}</div>
-        <div class="notif-text"><p>${it[1]}</p><span>${it[2]}</span></div>
-      </div>
-    `).join('')}
-  </div>`;
+  return `<div class="card" style="padding:6px 20px;">${items.slice(0,n).map(it=>`
+    <div class="notif-row"><div class="notif-icon">${it[0]}</div><div class="notif-text"><p>${it[1]}</p><span>${it[2]}</span></div></div>
+  `).join('')}</div>`;
 }
-function notifList(n){ return getNotifications(n); }
-
 function renderNotifications(){
   app.innerHTML = `
   <section class="section wrap">
-    <div class="section-head"><div><h2>Notifications & Pipeline Updates</h2><p>Real-time updates on citizen problems and solutions moving through the pipeline.</p></div></div>
-    ${getNotifications(10)}
+    <div class="section-head"><div><h2>Notifications</h2><p>Updates on the problems and projects you're following.</p></div></div>
+    ${notifList(6)}
   </section>`;
 }
 
