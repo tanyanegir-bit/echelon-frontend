@@ -264,7 +264,7 @@ input[type=text], input[type=email], input[type=password], input[type=tel], text
 textarea{resize:vertical; min-height:110px;}
 .row2{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
 @media (max-width:560px){.row2{grid-template-columns:1fr;}}
-.evidence-row{display:grid; grid-template-columns:repeat(4,1fr); gap:12px;}
+.evidence-row{display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
 @media (max-width:560px){.evidence-row{grid-template-columns:repeat(2,1fr);}}
 .evidence-tile{border:1.5px dashed var(--line); border-radius:9px; padding:20px 10px; text-align:center; font-size:12.5px; color:var(--ink-soft); cursor:pointer; transition:border-color .15s;}
 .evidence-tile:hover{border-color:var(--primary-light); color:var(--primary-light);}
@@ -846,6 +846,34 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
   updateNav();
 });
 /* ============== DATA ============== */
+
+const JHARKHAND_DISTRICT_COORDS = {
+  "Ranchi": [23.3441, 85.3096],
+  "East Singhbhum": [22.8046, 86.2029],
+  "West Singhbhum": [22.5684, 85.8077],
+  "Dhanbad": [23.7957, 86.4304],
+  "Bokaro": [23.6693, 86.1511],
+  "Hazaribagh": [23.9925, 85.3637],
+  "Deoghar": [24.4826, 86.6974],
+  "Dumka": [24.2676, 87.2505],
+  "Giridih": [24.1856, 86.3129],
+  "Gumla": [23.0436, 84.5417],
+  "Khunti": [23.0744, 85.2789],
+  "Koderma": [24.4674, 85.5939],
+  "Latehar": [23.7437, 84.4984],
+  "Lohardaga": [23.4414, 84.6806],
+  "Pakur": [24.6340, 87.8492],
+  "Palamu": [24.0373, 84.0722],
+  "Ramgarh": [23.6300, 85.5126],
+  "Sahibganj": [25.2425, 87.6417],
+  "Seraikela-Kharsawan": [22.7006, 85.9304],
+  "Simdega": [22.6166, 84.5108],
+  "Chatra": [24.2087, 84.8718],
+  "Garhwa": [24.1607, 83.8052],
+  "Jamtara": [23.9592, 86.8017],
+  "Godda": [24.8267, 87.2131]
+};
+
 const DISTRICTS = [
  ["Ranchi",212,58,71,83],["East Singhbhum",184,44,60,80],["West Singhbhum",96,31,29,36],
  ["Dhanbad",151,39,52,60],["Bokaro",118,28,41,49],["Hazaribagh",87,26,31,30],
@@ -921,26 +949,152 @@ async function loadIdeas() {
   };
 }
 
+
+function normalizeProblemTitle(t) {
+  if (!t) return '';
+  return t
+    .toLowerCase()
+    .replace(/[.,\/#!$%\^&\*;:{}=\-_'~`()]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function areDuplicateProblems(p1, p2) {
+  const d1 = (p1.district || '').toLowerCase().trim();
+  const d2 = (p2.district || '').toLowerCase().trim();
+  if (d1 !== d2) return false;
+
+  const n1 = normalizeProblemTitle(p1.title);
+  const n2 = normalizeProblemTitle(p2.title);
+  if (!n1 || !n2) return false;
+  if (n1 === n2) return true;
+
+  // Word overlap comparison
+  const words1 = n1.split(' ').filter(w => w.length > 2);
+  const words2 = n2.split(' ').filter(w => w.length > 2);
+  if (!words1.length || !words2.length) return false;
+
+  const common = words1.filter(w => words2.includes(w));
+  const overlap = common.length / Math.min(words1.length, words2.length);
+
+  // If heavy word overlap (>= 75%) and one contains or starts with the other
+  if (overlap >= 0.75 && (n1.startsWith(n2) || n2.startsWith(n1) || n1.includes(n2) || n2.includes(n1))) {
+    return true;
+  }
+  return false;
+}
+
+let TOTAL_REPORTS_COUNT = 0;
+
+let RAW_ALL_PROBLEMS = [];
+
+function consolidateProblems(rawList) {
+  RAW_ALL_PROBLEMS = rawList.map(mapProblem);
+  TOTAL_REPORTS_COUNT = rawList.length;
+
+  const clusters = [];
+  const STAGES_ORDER = ['submitted', 'ai_analyzed', 'open_for_solutions', 'solution_selected', 'prototype', 'development', 'testing', 'government_review', 'pilot', 'implemented', 'resolved'];
+
+  rawList.forEach(raw => {
+    const match = clusters.find(c => areDuplicateProblems(c.primaryRaw, raw));
+    if (match) {
+      match.duplicates.push(raw);
+      match.submissionCount++;
+      if ((raw.title || '').length > (match.primaryRaw.title || '').length) {
+        match.primaryRaw.title = raw.title;
+      }
+      if ((raw.description || '').length > (match.primaryRaw.description || '').length) {
+        match.primaryRaw.description = raw.description;
+      }
+      if (STAGES_ORDER.indexOf(raw.status) > STAGES_ORDER.indexOf(match.primaryRaw.status)) {
+        match.primaryRaw.status = raw.status;
+      }
+      if (raw.ai_analyses && raw.ai_analyses.length && (!match.primaryRaw.ai_analyses || !match.primaryRaw.ai_analyses.length)) {
+        match.primaryRaw.ai_analyses = raw.ai_analyses;
+      }
+      if (raw.citizen_id) {
+        match.citizenIds.push(raw.citizen_id);
+      }
+    } else {
+      clusters.push({
+        primaryRaw: { ...raw },
+        duplicates: [raw],
+        submissionCount: 1,
+        citizenIds: raw.citizen_id ? [raw.citizen_id] : []
+      });
+    }
+  });
+
+  return clusters.map(c => {
+    const mapped = mapProblem(c.primaryRaw);
+    mapped.duplicates = c.duplicates.map(d => ({
+      id: d.problem_code || d.id,
+      rawId: d.id,
+      title: d.title,
+      date: new Date(d.created_at).toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'}),
+      status: STATUS_MAP[d.status] || 'New'
+    }));
+    mapped.citizenIds = c.citizenIds;
+    mapped.duplicateCount = c.submissionCount;
+    mapped.upvotes = c.submissionCount;
+    return mapped;
+  });
+}
+
+function reportSameProblem(problemId){
+  const p = PROBLEMS.find(x => x.id === problemId || x.rawId === problemId);
+  if(!p) return;
+
+  // Authentication check
+  if(!currentSession?.user){
+    sessionStorage.setItem('echelon_redirect_after_login', '#/submit?parent=' + encodeURIComponent(p.id));
+    showToast('Please log in to report and verify this problem.');
+    location.hash = '#/login';
+    return;
+  }
+
+  // Pre-populate submitData with existing problem title & previous user description (changeable!)
+  submitData.title = p.title;
+  submitData.district = p.district || 'Ranchi';
+  submitData.state = 'Jharkhand';
+  submitData.village = p.village || '';
+  submitData.pin = p.pin || '';
+  submitData.desc = p.description || '';
+  submitData.lat = p.lat || null;
+  submitData.lng = p.lng || null;
+  submitData.evidence = [];
+  submitData.isDuplicateReport = true;
+  submitData.parentProblemId = p.rawId || p.id;
+
+  // Direct to the page that comes after 'problem title': Step 2 (Location)
+  submitStep = 2;
+  location.hash = '#/submit';
+  renderSubmit();
+  showToast('Verifying: "' + p.title + '". Confirm your location & evidence.');
+}
+
+
+
    async function loadProblems() {
      try {
        const res = await fetch(`${API_URL}/api/problems`);
        const data = await res.json();
-       PROBLEMS = data.map(mapProblem);
+       PROBLEMS = consolidateProblems(data);
      } catch (e) {
        console.error("Failed to load problems", e);
        PROBLEMS = [];
      }
-        navigate();
+     navigate();
    }
    async function refreshProblemsData() {
-  try {
-    const res = await fetch(`${API_URL}/api/problems`);
-    const data = await res.json();
-    PROBLEMS = data.map(mapProblem);
-  } catch (e) {
-    console.error("Failed to refresh problems", e);
-  }
-}
+     try {
+       const res = await fetch(`${API_URL}/api/problems`);
+       const data = await res.json();
+       PROBLEMS = consolidateProblems(data);
+     } catch (e) {
+       console.error("Failed to refresh problems", e);
+     }
+   }
 const IDEAS = [
  {title:"Low-cost IoT water quality sensor network", problem:"Unsafe drinking water in rural hamlet", uni:"BIT Mesra", team:"Team Aquasense (4)", tech:["IoT","LoRaWAN","Cloud"], impact:"12,000 residents", cost:"₹4.2L", match:92, proto:"Working prototype", interest:3},
  {title:"Solar-powered adaptive streetlight grid", problem:"No streetlights on school access road", uni:"NIT Jamshedpur", team:"Team Lumen (3)", tech:["Solar","IoT","Embedded C"], impact:"1,800 residents", cost:"₹2.8L", match:88, proto:"Design validated", interest:2},
@@ -1018,9 +1172,10 @@ function communityInterestLabel(count){
 }
 
 function problemCard(p){
-  const similar = getSimilarReports(p);
-  const interest = communityInterestLabel(similar.length);
-  return `<div class="card problem-card" style="cursor:pointer;" onclick="location.hash='#/problem/${p.id}'">
+  const upvotes = p.upvotes || 1;
+  const dupCount = p.duplicateCount || 1;
+  const isHighPriority = upvotes >= 3;
+  return `<div class="card problem-card" style="cursor:pointer; position:relative;" onclick="location.hash='#/problem/${p.id}'">
     <div class="pc-top">
       <h4>${p.title}</h4>
       <span class="severity sev-${p.sev.toLowerCase()}">${p.sev}</span>
@@ -1029,12 +1184,21 @@ function problemCard(p){
       <span>${p.district} · Jharkhand</span><span>·</span><span>${p.cat}</span>
     </div>
     <div class="pc-meta">${p.tech.map(t=>`<span class="tag">${t}</span>`).join('')}</div>
-    ${similar.length > 1 ? `<div class="pc-meta"><span class="badge ${interest.cls}"><span class="d"></span>${similar.length} similar reports · ${interest.label} priority</span></div>` : ''}
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0 2px; flex-wrap:wrap; gap:6px;">
+      <span class="badge" style="background:${isHighPriority ? '#FBF0D9' : 'var(--paper)'}; border:1px solid ${isHighPriority ? '#E5C47A' : 'var(--line)'}; color:${isHighPriority ? '#7D570A' : 'var(--ink)'}; font-weight:700;">
+        ▲ ${upvotes} ${upvotes === 1 ? 'Citizen Report' : 'Citizen Reports'}
+      </span>
+      <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); reportSameProblem('${p.id}')" title="I have this problem too — verify and report from your area" style="padding:4px 10px; font-size:12px; font-weight:600;">
+        ▲ I Have This Problem Too
+      </button>
+    </div>
+
     <div class="pc-foot">
       <span class="badge ${STATUS_CLASS[p.status]}"><span class="d"></span>${p.status}</span>
       <span>${p.students} students · ${p.solutions} solutions</span>
     </div>
-    <div class="mono small-caps" style="margin-top:-4px;">${p.id} · reported ${p.date}</div>
+    <div class="mono small-caps" style="margin-top:-4px;">${p.id} · ${dupCount > 1 ? `${dupCount} duplicate reports consolidated` : `reported ${p.date}`}</div>
   </div>`;
 }
 
@@ -1063,7 +1227,7 @@ function renderHome(){
 
     <section class="stats-section">
     <div class="wrap stats-grid">
-      ${statBlock(PROBLEMS.length,'Problems reported')}
+      ${statBlock(TOTAL_REPORTS_COUNT || 21,'Problems reported')}
       ${statBlock(PROBLEMS.filter(p=>p.status==='Solved').length,'Problems solved')}
       ${statBlock(REAL_IDEAS.filter(i=>i.status==='selected').length,'Active projects')}
       ${statBlock('—','Universities engaged')}
@@ -1084,7 +1248,7 @@ function renderHome(){
       <a href="#/explorer" class="pill-link">View all problems →</a>
     </div>
     <div class="grid-3">
-      ${PROBLEMS.slice(0,3).map(problemCard).join('')}
+      ${[...PROBLEMS].sort((a,b)=>(b.upvotes||1)-(a.upvotes||1)).slice(0,3).map(problemCard).join('')}
     </div>
   </section>
 
@@ -1130,7 +1294,7 @@ function renderAbout(){
 /* ============== HOW IT WORKS ============== */
 function renderHow(){
   const steps = [
-    ["Citizen reports a problem","Title, location, description, and evidence — image, video, voice note or document."],
+    ["Citizen reports a problem","Title, location, description, and evidence — image, video or document."],
     ["AI understands the problem","AI identifies category, subcategory, severity, location, required technologies, skills and relevant departments."],
     ["Smart matching","ECHELON recommends the problem to relevant universities, departments and students based on skills and technologies."],
     ["Students & universities propose ideas","Teams form, submit ideas and solutions, upload prototypes, and estimate cost and impact."],
@@ -1162,11 +1326,20 @@ function renderHow(){
 }
 
 /* ============== EXPLORER ============== */
-let explorerState = {q:'', status:'All', cat:'All'};
+let explorerState = {q:'', status:'All', cat:'All', sort:'upvotes'};
 function renderExplorer(){
   app.innerHTML = `
   <section class="section wrap">
-    <div class="section-head"><div><h2>Problem Explorer</h2><p>Every reported problem, its status and the technologies it needs — filterable by district, category, severity and status.</p></div></div>
+    <div class="section-head">
+      <div>
+        <h2>Problem Explorer</h2>
+        <p>Browsing ${TOTAL_REPORTS_COUNT || 21} citizen reports across Jharkhand — consolidated into ${PROBLEMS.length} unique issues to prevent duplication.</p>
+      </div>
+      <div class="tabs" style="margin-bottom:0;">
+        <button class="tab-btn ${explorerState.viewMode!=='all'?'active':''}" onclick="setExplorerView('grouped')">Consolidated Issues (${PROBLEMS.length})</button>
+        <button class="tab-btn ${explorerState.viewMode==='all'?'active':''}" onclick="setExplorerView('all')">All Reports (${TOTAL_REPORTS_COUNT || 21})</button>
+      </div>
+    </div>
     <div class="filter-bar">
       <div class="search-input">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="#4B5955" stroke-width="1.4"/><path d="M11 11L14.5 14.5" stroke="#4B5955" stroke-width="1.4" stroke-linecap="round"/></svg>
@@ -1178,21 +1351,46 @@ function renderExplorer(){
       <select id="expCat" onchange="explorerState.cat=this.value; renderExplorerList();">
         <option>All</option>${[...new Set(PROBLEMS.map(p=>p.cat))].map(c=>`<option>${c}</option>`).join('')}
       </select>
+      <select id="expSort" onchange="explorerState.sort=this.value; renderExplorerList();">
+        <option value="upvotes">🔥 Most Upvoted</option>
+        <option value="newest">🕒 Newest First</option>
+        <option value="severity">⚠️ High Severity</option>
+      </select>
     </div>
     <div class="grid-3" id="explorerList"></div>
   </section>
   `;
   renderExplorerList();
 }
+function setExplorerView(mode){
+  explorerState.viewMode = mode;
+  document.querySelectorAll('.section-head .tab-btn').forEach((b, i) => {
+    b.classList.toggle('active', (mode === 'all' && i === 1) || (mode !== 'all' && i === 0));
+  });
+  renderExplorerList();
+}
+
 function renderExplorerList(){
   const el = document.getElementById('explorerList');
   if(!el) return;
-  const filtered = PROBLEMS.filter(p=>{
+  const listToUse = explorerState.viewMode === 'all' ? RAW_ALL_PROBLEMS : PROBLEMS;
+  const filtered = listToUse.filter(p=>{
     const matchQ = !explorerState.q || (p.title+p.district+p.cat).toLowerCase().includes(explorerState.q.toLowerCase());
     const matchS = explorerState.status==='All' || p.status===explorerState.status;
     const matchC = explorerState.cat==='All' || p.cat===explorerState.cat;
     return matchQ && matchS && matchC;
   });
+
+  if(explorerState.sort === 'newest'){
+    filtered.sort((a,b) => new Date(b.date) - new Date(a.date));
+  } else if(explorerState.sort === 'severity'){
+    const sevScore = {High: 3, Medium: 2, Low: 1};
+    filtered.sort((a,b) => (sevScore[b.sev]||0) - (sevScore[a.sev]||0));
+  } else {
+    // Default: Most Upvoted
+    filtered.sort((a,b) => (b.upvotes || 1) - (a.upvotes || 1));
+  }
+
   el.innerHTML = filtered.length ? filtered.map(problemCard).join('') :
     `<div class="card center" style="grid-column:1/-1; padding:40px;"><p class="muted">No problems match these filters. Try clearing a filter or searching a different term.</p></div>`;
 }
@@ -1365,13 +1563,15 @@ function renderTrackResult(){
 /* ============== SUBMIT PROBLEM ============== */
 /* ============== SUBMIT PROBLEM ============== */
 /* ============== SUBMIT PROBLEM ============== */
-const submitData = {title:'',state:'Jharkhand',district:'Ranchi',village:'',pin:'',desc:'',evidence:[],lat:null,lng:null};
+const submitData = {title:'',state:'Jharkhand',district:'Ranchi',village:'',pin:'',desc:'',evidence:[],lat:null,lng:null,isDuplicateReport:false,parentProblemId:null};
 let submitMapInstance = null;
 let submitMapMarker = null;
 let submitStep = 1;
 function renderSubmit(){
-  submitStep = 1;
-  Object.assign(submitData, {title:'',state:'Jharkhand',district:'Ranchi',village:'',pin:'',desc:'',evidence:[],lat:null,lng:null});
+  if(!submitData.isDuplicateReport){
+    submitStep = 1;
+    Object.assign(submitData, {title:'',state:'Jharkhand',district:'Ranchi',village:'',pin:'',desc:'',evidence:[],lat:null,lng:null,isDuplicateReport:false,parentProblemId:null});
+  }
   app.innerHTML = `<section class="section wrap"><div id="submitRoot"></div></section>`;
   renderSubmitStep();
 }
@@ -1390,21 +1590,44 @@ function renderSubmitStep(){
       <input type="text" id="f_title" placeholder="e.g. Unsafe drinking water in rural village" value="${submitData.title}">
       <div class="hint">Describe the problem in a short, clear sentence.</div></div>`;
   } else if(submitStep===2){
-    body = `<div class="row2">
-      <div class="field"><label>State</label><select id="f_state"><option>Jharkhand</option></select></div>
-      <div class="field"><label>District</label><select id="f_district">${DISTRICTS.map(d=>`<option ${d[0]===submitData.district?'selected':''}>${d[0]}</option>`).join('')}</select></div>
-    </div>
+    body = `
+      ${submitData.isDuplicateReport ? '<div style="background:var(--accent-soft); border-left:4px solid var(--accent); padding:13px 16px; border-radius:8px; margin-bottom:20px; font-size:13px; color:#5c430e; line-height:1.5;"><b>🔗 Verifying & Reporting Same Problem:</b> "' + submitData.title + '" (' + submitData.district + ')<div style="margin-top:4px; font-size:12px; color:#70500e;">Confirm your local village/ward location. In the next steps, you can review/customize the description and upload evidence to verify this issue.</div></div>' : ''}
+      <div class="row2">
+        <div class="field"><label>State</label><select id="f_state"><option>Jharkhand</option></select></div>
+        <div class="field"><label>District</label><select id="f_district" onchange="handleDistrictChange(this.value)">${DISTRICTS.map(d=>`<option ${d[0]===(submitData.district||'Dumka')?'selected':''}>${d[0]}</option>`).join('')}</select></div>
+      </div>
     <div class="row2">
-      <div class="field"><label>Village / City <span style="color:var(--error);">*</span></label><input type="text" id="f_village" value="${submitData.village}" placeholder="e.g. Nagri"></div>
-      <div class="field"><label>Pin code <span style="color:var(--error);">*</span></label><input type="text" id="f_pin" value="${submitData.pin}" placeholder="e.g. 835222"></div>
+      <div class="field">
+        <label>Village / City <span style="color:var(--error);">*</span></label>
+        <input type="text" id="f_village" value="${submitData.village}" placeholder="e.g. Kathikund" oninput="scheduleAutoLocate()" onblur="autoLocateAddress()">
+        <div class="hint">Type village, locality, or ward name</div>
+      </div>
+      <div class="field">
+        <label>Pin code <span style="color:var(--error);">*</span></label>
+        <input type="text" id="f_pin" value="${submitData.pin}" placeholder="e.g. 814103" oninput="scheduleAutoLocate()" onblur="autoLocateAddress()">
+        <div class="hint">6-digit postal PIN code</div>
+      </div>
     </div>
-    <div class="field"><label>Map location <span style="color:var(--error);">*</span></label>
-      <div id="submitMap" style="height:220px; border:1px solid var(--line); border-radius:9px;"></div>
-      <div class="hint" id="mapCoords">${submitData.lat ? `Selected: ${submitData.lat.toFixed(5)}, ${submitData.lng.toFixed(5)}` : 'Click on the map to mark the exact location.'}</div>
+    <div class="field">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:7px; flex-wrap:wrap; gap:8px;">
+        <label style="margin-bottom:0;">Map location <span style="color:var(--error);">*</span></label>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="autoLocateAddress()" style="font-size:12px; padding:4px 9px;">📍 Auto-locate from address</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="useCurrentGPS()" style="font-size:12px; padding:4px 9px;">🎯 Use My GPS</button>
+        </div>
+      </div>
+      <div id="submitMap" style="height:260px; border:1px solid var(--line); border-radius:9px; position:relative; z-index:1; background:#f0eee9;"></div>
+      <div class="hint" id="mapCoords" style="margin-top:7px; font-weight:500;">
+        ${submitData.lat ? `<span style="color:var(--success); font-weight:600;">✓ Selected:</span> ${submitData.lat.toFixed(5)}, ${submitData.lng.toFixed(5)} <span class="muted" style="font-size:12px;">(Click map or drag pin to adjust)</span>` : 'Click on the map or enter address to auto-locate.'}
+      </div>
     </div>`;
   } else if(submitStep===3){
-    body = `<div class="field"><label>Describe the problem in detail <span style="color:var(--error);">*</span></label>
-      <textarea id="f_desc" placeholder="What is happening, how long has it been a problem, and who is affected? (minimum 20 characters)">${submitData.desc}</textarea></div>`;
+    body = `
+      ${submitData.isDuplicateReport ? '<div style="background:#EBF5F0; border-left:4px solid var(--success); padding:11px 14px; border-radius:6px; margin-bottom:16px; font-size:13px; color:#1b5e34;">ℹ️ <b>Problem Description:</b> Pre-filled with description submitted by previous citizens for <b>"' + submitData.title + '"</b>. You can keep it as is or edit it to describe your specific locality situation.</div>' : ''}
+      <div class="field"><label>Describe the problem in detail <span style="color:var(--error);">*</span></label>
+        <textarea id="f_desc" placeholder="What is happening, how long has it been a problem, and who is affected? (minimum 20 characters)">${submitData.desc}</textarea>
+        ${submitData.isDuplicateReport ? '<div class="hint" style="color:var(--primary-light); font-weight:500;">✓ Pre-filled from previous report — freely editable.</div>' : ''}
+      </div>`;
   } else if(submitStep===4){
     body = `<div class="field"><label>Add evidence <span style="color:var(--error);">*</span></label>
       <div class="evidence-row">
@@ -1412,8 +1635,6 @@ function renderSubmitStep(){
           <input type="file" id="ev_image" accept="image/*" style="display:none" onchange="handleEvidenceFile(this,'image')"></div>
         <div class="evidence-tile" onclick="document.getElementById('ev_video').click()">🎥<br>Upload Video
           <input type="file" id="ev_video" accept="video/*" style="display:none" onchange="handleEvidenceFile(this,'video')"></div>
-        <div class="evidence-tile" onclick="document.getElementById('ev_audio').click()">🎙️<br>Voice Note
-          <input type="file" id="ev_audio" accept="audio/*" style="display:none" onchange="handleEvidenceFile(this,'audio')"></div>
         <div class="evidence-tile" onclick="document.getElementById('ev_doc').click()">📄<br>Document
           <input type="file" id="ev_doc" accept=".pdf,.doc,.docx" style="display:none" onchange="handleEvidenceFile(this,'document')"></div>
       </div>
@@ -1445,27 +1666,232 @@ function renderSubmitStep(){
   if(submitStep===4) renderEvidenceList();
 }
 
+function setMapPoint(lat, lng, isUserClick = false){
+  if(!submitMapInstance) return;
+  submitData.lat = Number(lat);
+  submitData.lng = Number(lng);
+
+  const customPin = L.divIcon({
+    className: 'echelon-map-marker',
+    html: `<div style="width:32px; height:32px; background:#0F3D3E; border:2.5px solid #FFFFFF; border-radius:50% 50% 50% 0; transform:rotate(-45deg); box-shadow:0 3px 10px rgba(0,0,0,0.35); display:flex; align-items:center; justify-content:center; cursor:pointer;"><div style="transform:rotate(45deg); font-size:14px;">📍</div></div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+    popupAnchor: [0, -32]
+  });
+
+  if(submitMapMarker){
+    submitMapMarker.setLatLng([lat, lng]);
+  } else {
+    submitMapMarker = L.marker([lat, lng], { icon: customPin, draggable: true }).addTo(submitMapInstance);
+    submitMapMarker.on('dragend', function(e){
+      const pos = e.target.getLatLng();
+      setMapPoint(pos.lat, pos.lng, true);
+    });
+  }
+
+  const coordsEl = document.getElementById('mapCoords');
+  if(coordsEl){
+    coordsEl.innerHTML = `<span style="color:var(--success); font-weight:600;">✓ Selected:</span> ${lat.toFixed(5)}, ${lng.toFixed(5)} <span class="muted" style="font-size:12px;">(Click or drag pin to adjust)</span>`;
+  }
+  const errEl = document.getElementById('stepError');
+  if(errEl) errEl.textContent = '';
+}
+
+function handleDistrictChange(district){
+  submitData.district = district;
+  const village = document.getElementById('f_village')?.value?.trim();
+  const pin = document.getElementById('f_pin')?.value?.trim();
+
+  // If village or pin exists, try to locate with new district
+  if(village || pin){
+    autoLocateAddress();
+    return;
+  }
+
+  // Otherwise pan directly to the district center
+  const coords = JHARKHAND_DISTRICT_COORDS[district];
+  if(coords && submitMapInstance){
+    submitMapInstance.flyTo(coords, 12, { duration: 1.0 });
+    setMapPoint(coords[0], coords[1], false);
+    const coordsEl = document.getElementById('mapCoords');
+    if(coordsEl){
+      coordsEl.innerHTML = `📍 Centered at <b>${district}</b> (${coords[0].toFixed(5)}, ${coords[1].toFixed(5)}). <span class="muted">Enter village or click map to pinpoint.</span>`;
+    }
+  }
+}
+
+let autoLocateTimer = null;
+function scheduleAutoLocate(){
+  clearTimeout(autoLocateTimer);
+  autoLocateTimer = setTimeout(()=>{
+    autoLocateAddress();
+  }, 650);
+}
+
+async function autoLocateAddress(){
+  const village = document.getElementById('f_village')?.value?.trim() || submitData.village || '';
+  const pin = document.getElementById('f_pin')?.value?.trim() || submitData.pin || '';
+  const district = document.getElementById('f_district')?.value || submitData.district || 'Dumka';
+
+  if(!village && !pin){
+    const coords = JHARKHAND_DISTRICT_COORDS[district];
+    if(coords && submitMapInstance){
+      submitMapInstance.flyTo(coords, 12, { duration: 0.8 });
+      setMapPoint(coords[0], coords[1], false);
+    }
+    return;
+  }
+
+  const coordsEl = document.getElementById('mapCoords');
+  if(coordsEl){
+    coordsEl.innerHTML = `<span style="color:var(--primary-light);">🔍 Locating "${village || pin}, ${district}" on map...</span>`;
+  }
+
+  // Construct geocoding queries in order of specificity
+  const queries = [];
+  if(village && district && pin){
+    queries.push(`${village}, ${district}, Jharkhand, ${pin}, India`);
+    queries.push(`${village}, ${district}, Jharkhand`);
+  } else if(village && district){
+    queries.push(`${village}, ${district}, Jharkhand`);
+  } else if(pin){
+    queries.push(`${pin}, Jharkhand, India`);
+    queries.push(`${pin}, India`);
+  }
+
+  let found = null;
+  for(const q of queries){
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`;
+      const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if(res.ok){
+        const data = await res.json();
+        if(data && data.length > 0){
+          found = {
+            lat: parseFloat(data[0].lat),
+            lng: parseFloat(data[0].lon),
+            name: data[0].display_name
+          };
+          break;
+        }
+      }
+    } catch(e){
+      console.warn('Geocoding query error:', q, e);
+    }
+  }
+
+  if(found && submitMapInstance){
+    submitMapInstance.flyTo([found.lat, found.lng], 14, { duration: 1.2 });
+    setMapPoint(found.lat, found.lng, false);
+    if(coordsEl){
+      const shortName = found.name.split(',').slice(0, 2).join(',');
+      coordsEl.innerHTML = `<span style="color:var(--success); font-weight:600;">✓ Auto-located:</span> ${shortName} (${found.lat.toFixed(5)}, ${found.lng.toFixed(5)}) <span class="muted" style="font-size:12px;">(Click map to fine-tune)</span>`;
+    }
+  } else {
+    // Fall back to district center
+    const fallback = JHARKHAND_DISTRICT_COORDS[district] || [24.2676, 87.2505];
+    if(submitMapInstance){
+      submitMapInstance.flyTo(fallback, 12, { duration: 0.9 });
+      setMapPoint(fallback[0], fallback[1], false);
+    }
+    if(coordsEl){
+      coordsEl.innerHTML = `📍 Located near <b>${district}</b> (${fallback[0].toFixed(5)}, ${fallback[1].toFixed(5)}) <span class="muted" style="font-size:12px;">(Click on map to mark exact village spot)</span>`;
+    }
+  }
+}
+
+function useCurrentGPS(){
+  if(!navigator.geolocation){
+    alert('Geolocation is not supported by your browser.');
+    return;
+  }
+  const coordsEl = document.getElementById('mapCoords');
+  if(coordsEl) coordsEl.innerHTML = `<span style="color:var(--primary-light);">📡 Fetching GPS location...</span>`;
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      if(submitMapInstance){
+        submitMapInstance.flyTo([lat, lng], 15, { duration: 1.2 });
+        setMapPoint(lat, lng, true);
+        if(coordsEl){
+          coordsEl.innerHTML = `<span style="color:var(--success); font-weight:600;">✓ GPS Location Locked:</span> ${lat.toFixed(5)}, ${lng.toFixed(5)} <span class="muted" style="font-size:12px;">(Click map to adjust)</span>`;
+        }
+      }
+    },
+    (err) => {
+      alert('Could not retrieve GPS location: ' + err.message);
+      if(coordsEl){
+        coordsEl.textContent = 'Please click on the map or enter address to locate.';
+      }
+    },
+    { enableHighAccuracy: true, timeout: 8000 }
+  );
+}
+
 function initSubmitMap(){
   setTimeout(()=>{
     const mapEl = document.getElementById('submitMap');
     if(!mapEl || typeof L === 'undefined') return;
-    const startLat = submitData.lat || 23.3441;
-    const startLng = submitData.lng || 85.3096;
-    submitMapInstance = L.map('submitMap').setView([startLat, startLng], submitData.lat ? 13 : 7);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(submitMapInstance);
-    if(submitData.lat){ submitMapMarker = L.marker([submitData.lat, submitData.lng]).addTo(submitMapInstance); }
-    submitMapInstance.on('click', function(e){
-      submitData.lat = e.latlng.lat;
-      submitData.lng = e.latlng.lng;
-      if(submitMapMarker){ submitMapMarker.setLatLng(e.latlng); }
-      else { submitMapMarker = L.marker(e.latlng).addTo(submitMapInstance); }
-      document.getElementById('mapCoords').textContent = `Selected: ${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`;
-      document.getElementById('stepError').textContent = '';
+
+    if(submitMapInstance){
+      try { submitMapInstance.remove(); } catch(e){}
+      submitMapInstance = null;
+      submitMapMarker = null;
+    }
+
+    const district = document.getElementById('f_district')?.value || submitData.district || 'Dumka';
+    const distCoords = JHARKHAND_DISTRICT_COORDS[district] || [24.2676, 87.2505];
+    const startLat = submitData.lat || distCoords[0];
+    const startLng = submitData.lng || distCoords[1];
+    const startZoom = submitData.lat ? 14 : (district ? 12 : 8);
+
+    submitMapInstance = L.map('submitMap', {
+      scrollWheelZoom: true,
+      zoomControl: true,
+      dragging: true,
+      touchZoom: true,
+      doubleClickZoom: true
+    }).setView([startLat, startLng], startZoom);
+
+    // Reliable CartoDB Voyager tiles (never 403-blocked on local file:// or web)
+    const primaryTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      subdomains: 'abcd',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions" target="_blank">CARTO</a>'
     });
-    setTimeout(()=>submitMapInstance.invalidateSize(), 200);
-  }, 50);
+    primaryTiles.addTo(submitMapInstance);
+
+    // Fallback if tiles fail
+    primaryTiles.on('tileerror', function(){
+      if(!submitMapInstance._fallbackAdded){
+        submitMapInstance._fallbackAdded = true;
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+          attribution: '&copy; Esri &mdash; OpenStreetMap'
+        }).addTo(submitMapInstance);
+      }
+    });
+
+    if(submitData.lat && submitData.lng){
+      setMapPoint(submitData.lat, submitData.lng, false);
+    } else {
+      const village = document.getElementById('f_village')?.value || submitData.village;
+      const pin = document.getElementById('f_pin')?.value || submitData.pin;
+      if(village || pin){
+        autoLocateAddress();
+      } else {
+        setMapPoint(startLat, startLng, false);
+      }
+    }
+
+    submitMapInstance.on('click', function(e){
+      setMapPoint(e.latlng.lat, e.latlng.lng, true);
+    });
+
+    setTimeout(()=>submitMapInstance.invalidateSize(), 150);
+    setTimeout(()=>submitMapInstance.invalidateSize(), 450);
+  }, 60);
 }
 
 function handleEvidenceFile(input, type){
@@ -1479,7 +1905,7 @@ function renderEvidenceList(){
   const el = document.getElementById('evidenceList');
   if(!el) return;
   el.innerHTML = submitData.evidence.map((e,i)=>`<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0;">
-    <span>${e.type==='image'?'📷':e.type==='video'?'🎥':e.type==='audio'?'🎙️':'📄'} ${e.name}</span>
+    <span>${e.type==='image'?'📷':e.type==='video'?'🎥':'📄'} ${e.name}</span>
     <button type="button" class="btn btn-ghost btn-sm" onclick="removeEvidence(${i})">Remove</button>
   </div>`).join('');
 }
@@ -1504,7 +1930,7 @@ function validateCurrentStep(){
     if(!desc || desc.length < 20) return 'Please provide a description of at least 20 characters.';
   }
   if(submitStep===4){
-    if(!submitData.evidence.length) return 'At least one piece of evidence (photo, video, voice note, or document) is required.';
+    if(!submitData.evidence.length) return 'At least one piece of evidence (photo, video, or document) is required.';
   }
   return null;
 }
@@ -1551,19 +1977,22 @@ async function submitFinal(){
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentSession?.access_token || ''}` }
     }).catch(e => console.error('AI analysis failed', e));
 
+    const isDup = submitData.isDuplicateReport;
+    const titleVal = submitData.title;
     root.innerHTML = `
       <div class="card success-box">
-        <div style="font-size:38px;">✓</div>
-        <h3 style="font-size:22px; margin-top:10px;">Problem submitted successfully</h3>
-        <p class="muted" style="margin-top:6px;">Your problem has entered the ECHELON pipeline.</p>
+        <div style="font-size:38px; color:var(--success);">✓</div>
+        <h3 style="font-size:22px; margin-top:10px;">${isDup ? 'Problem Verified & Upvoted Successfully!' : 'Problem submitted successfully'}</h3>
+        <p class="muted" style="margin-top:6px;">${isDup ? 'Your report and evidence have verified "' + titleVal + '". A confirmed citizen report / upvote has been credited to this problem!' : 'Your problem has entered the ECHELON pipeline.'}</p>
         <div class="pid-chip">${created.problem_code || created.id}</div>
-        <div><span class="badge st-analyzed"><span class="d"></span>AI Analysis in Progress</span></div>
+        <div><span class="badge st-analyzed"><span class="d"></span>${isDup ? 'Community Upvote Recorded' : 'AI Analysis in Progress'}</span></div>
         <div style="margin-top:26px; display:flex; gap:10px; justify-content:center;">
           <a href="#/track" class="btn btn-ghost">Track this problem</a>
-          <a href="#/explorer" class="btn btn-primary">Explore other problems</a>
+          <a href="#/explorer" class="btn btn-primary">Explore all problems</a>
         </div>
       </div>
     `;
+    submitData.isDuplicateReport = false;
     refreshProblemsData();
   } catch (e) {
     console.error(e);
@@ -1964,7 +2393,7 @@ function renderCitizenProfile(){
   const name = isAuth ? (currentUserProfile?.full_name || currentSession.user.email?.split('@')[0] || 'Citizen') : 'Rekha Kumari';
   const initials = getInitials(name);
   const loc = isAuth ? (currentUserProfile?.location || 'Jharkhand, India') : 'Nagri, Ranchi · Jharkhand';
-  const myProblems = isAuth ? PROBLEMS.filter(p => p.citizenId === currentSession.user.id) : PROBLEMS.slice(0,3);
+  const myProblems = isAuth ? PROBLEMS.filter(p => (p.citizenIds && p.citizenIds.includes(currentSession.user.id)) || p.citizenId === currentSession.user.id) : PROBLEMS.slice(0,3);
   const solvedCount = myProblems.filter(p => p.status === 'Solved').length;
 
   app.innerHTML = `
@@ -2681,22 +3110,35 @@ function renderAdmin(){
 
 /* ============== PROBLEM DETAIL ============== */
 function renderProblemDetail(id){
-  const p = PROBLEMS.find(x=>x.id===id) || PROBLEMS[0];
-  const similar = getSimilarReports(p).filter(x => x.id !== p.id);
-  const interest = communityInterestLabel(similar.length + 1);
+  const p = PROBLEMS.find(x=>x.id===id || x.rawId===id) || PROBLEMS[0];
+  const upvotes = p.upvotes || 1;
+  const dupCount = p.duplicateCount || 1;
   app.innerHTML = `
   <section class="section wrap">
     <div class="detail-hero">
       <div>
         <div class="mono small-caps">${p.id}</div>
         <h2 style="font-size:24px; margin-top:6px; max-width:32ch;">${p.title}</h2>
-        <div class="pc-meta" style="margin-top:8px;">${p.district}, Jharkhand · Reported by Rekha Kumari · ${p.date}</div>
+        <div class="pc-meta" style="margin-top:8px;">${p.district}, Jharkhand · ${dupCount > 1 ? `${dupCount} citizen reports consolidated` : `Reported ${p.date}`}</div>
       </div>
-      <span class="badge ${STATUS_CLASS[p.status]}" style="font-size:13px; padding:7px 14px;"><span class="d"></span>${p.status}</span>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span class="badge ${STATUS_CLASS[p.status]}" style="font-size:13px; padding:7px 14px;"><span class="d"></span>${p.status}</span>
+      </div>
     </div>
-    ${similar.length > 0 ? `<div class="demo-banner" style="background:#FFF8EA; border-color:#EFDCA6; color:#6B4E12; margin-top:16px;">
-      <span>📍 <b>${similar.length + 1} people</b> have reported a similar <b>${p.cat}</b> issue in <b>${p.district}</b> — flagged as <b>${interest.label} priority</b> based on community interest.</span>
-    </div>` : ''}
+
+    <div style="background:var(--accent-soft); border:1px solid #DFCE9F; border-radius:9px; padding:16px 20px; margin:16px 0 24px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;">
+      <div>
+        <div style="font-weight:700; font-size:16px; color:#5c430e;">
+          ▲ ${upvotes} Confirmed Citizen Reports ${dupCount > 1 ? '(${dupCount} duplicate citizen reports consolidated)' : ''}
+        </div>
+        <p class="muted" style="margin:4px 0 0; font-size:13px; color:#6B4E12; max-width:65ch;">
+          ${dupCount > 1 ? 'This exact issue has been reported ' + dupCount + ' times by citizens in ' + p.district + '. To ensure authenticity, citizen upvotes require confirming your location and uploading verification proof.' : 'Facing this problem in your area? Confirm your location, customize the pre-filled description, and upload proof to add your verified citizen upvote.'}
+        </p>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="reportSameProblem('${p.id}')" style="font-size:13.5px; padding:9px 18px; font-weight:600; white-space:nowrap;">
+        ▲ I Have This Problem Too (Verify & Report)
+      </button>
+    </div>
     <div class="detail-grid">
       <div>
         <div class="detail-block">
